@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const AIService = require('../services/aiService');
 const PricingService = require('../services/pricingService');
+const FaultTolerantProcessor = require('../services/faultTolerantProcessor');
 const axios = require('axios');
 
 // POST /webhook/ghl - Main GHL webhook endpoint
@@ -205,7 +206,7 @@ function parseGHLMessage(message, customData) {
   };
 }
 
-// Async message processing function
+// ✅ CLEAN: Main message processing function (fault tolerant)
 async function processMessageAsync(messageData) {
   try {
     console.log('🔄 Processing message for contact:', messageData.contact_id);
@@ -225,9 +226,6 @@ async function processMessageAsync(messageData) {
       console.log('⚠️ No contact_id found, cannot send response');
       return;
     }
-    
-    // Skip only if we have no content AND no media
-    // All media files (including MP4 video) are processed as 'voice' for audio extraction
     
     // Step 1: Get pricing data
     console.log('📊 Fetching pricing data...');
@@ -258,20 +256,61 @@ async function processMessageAsync(messageData) {
     // Step 3: Send response back to customer (only if AI generated a response)
     if (aiResult.customer_response && aiResult.customer_response.trim()) {
       console.log('📤 Sending customer response...');
-      await sendGHLResponse(messageData, aiResult.customer_response);
-      console.log('✅ Message processing completed successfully');
+      
+      // Send message first (critical path)
+      try {
+        await sendGHLResponse(messageData, aiResult.customer_response);
+        console.log('✅ Customer response sent successfully');
+      } catch (messageError) {
+        console.error('❌ Failed to send customer response:', messageError.message);
+        // Don't continue with post-processing if we can't even send the message
+        return;
+      }
+      
+      // Step 4: Process tags and pipeline (fault tolerant, non-critical)
+      console.log('🔄 Starting post-AI processing...');
+      try {
+        const postProcessResults = await FaultTolerantProcessor.processPostAIActions(
+          messageData.contact_id,
+          aiResult.classification,
+          { 
+            targetStage: 'IA Diagnostico enviado',
+            locationId: messageData.location_id 
+          }
+        );
+        
+        // Log results summary
+        console.log(`📊 Post-processing completed: ${postProcessResults.overall.completedSteps}/${postProcessResults.overall.totalSteps} operations successful`);
+        
+        if (postProcessResults.tags.success) {
+          console.log('✅ Tags processed successfully');
+        } else if (postProcessResults.tags.error) {
+          console.log('⚠️ Tags failed:', postProcessResults.tags.error);
+        }
+        
+        if (postProcessResults.pipeline.success) {
+          console.log('✅ Pipeline processed successfully');
+        } else if (postProcessResults.pipeline.error) {
+          console.log('⚠️ Pipeline failed:', postProcessResults.pipeline.error);
+        }
+        
+      } catch (postProcessError) {
+        console.error('⚠️ Post-processing failed, but customer got response:', postProcessError.message);
+      }
+      
+      console.log('✅ Message processing completed (customer response sent regardless of post-processing results)');
+      
     } else {
       console.log('⚠️ No AI response generated, not sending message');
     }
     
   } catch (error) {
     console.error('❌ Message processing error:', error);
-    // No fallback - just log the error and end
-    console.log('🔚 Processing ended due to error - no fallback message sent');
+    console.log('🔚 Processing ended due to error');
   }
 }
 
-// Send response via GHL API
+// Send response via GHL API (unchanged but with better error handling)
 async function sendGHLResponse(messageData, responseText) {
   try {
     // Determine the correct message type based on channel
@@ -429,43 +468,73 @@ router.post('/test', async (req, res) => {
   });
 });
 
+// GET /webhook/pipeline-info - Get pipeline information
+router.get('/pipeline-info', async (req, res) => {
+  try {
+    const info = await FaultTolerantProcessor.getPipelineInfo();
+    res.json({
+      success: info.success,
+      pipeline_info: info,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: error.message,
+      success: false,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// GET /webhook/health - Comprehensive health check
+router.get('/health', (req, res) => {
+  try {
+    const healthStatus = FaultTolerantProcessor.getHealthStatus();
+    
+    res.json({
+      status: 'healthy',
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      memory: process.memoryUsage(),
+      version: '8.0.0-modular-fault-tolerant',
+      services: healthStatus,
+      environment: {
+        node_env: process.env.NODE_ENV,
+        has_ghl_key: !!process.env.GHL_API_KEY,
+        has_openai_key: !!process.env.OPENAI_API_KEY
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'unhealthy',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // GET /webhook/status - Check webhook status
 router.get('/status', (req, res) => {
   res.json({
     status: 'active',
     timestamp: new Date().toISOString(),
+    architecture: 'modular',
     endpoints: {
       main: '/webhook/ghl',
       test: '/webhook/test',
-      status: '/webhook/status'
+      health: '/webhook/health',
+      status: '/webhook/status',
+      'pipeline-info': '/webhook/pipeline-info'
     },
-    services: {
-      ai: 'AIService loaded',
-      pricing: 'PricingService loaded',
-      ghl_api: 'Direct API calls'
+    features: {
+      message_processing: 'AI + pricing lookup',
+      tag_management: 'fault tolerant with retry',
+      pipeline_management: 'fault tolerant with retry', 
+      error_handling: 'non-blocking post-processing',
+      modular_design: 'separate services for tags and opportunities'
     },
     message_types_supported: ['text', 'image', 'voice'],
-    message_types_processed_as_voice: ['mp4', 'mov', 'avi', 'ogg', 'wav', 'm4a', 'webm', '3gp'],
-    note: 'All audio and video files are processed as voice for audio extraction',
-    features_removed: ['contact_tags', 'opportunities', 'fallback_messages'],
-    ghl_structure: 'Real webhook format with debug_has_attachments support',
-    detection_methods: ['debug_attachments_voice', 'debug_attachments_image', 'debug_attachments_video', 'ghl_text_content_found', 'ghl_attachment_found'],
-    environment: {
-      node_env: process.env.NODE_ENV,
-      has_ghl_key: !!process.env.GHL_API_KEY,
-      has_openai_key: !!process.env.OPENAI_API_KEY
-    }
-  });
-});
-
-// GET /webhook/health - Health check
-router.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-    memory: process.memoryUsage(),
-    version: '6.1.0-audio-extraction-fixed'
+    note: 'Modular architecture with fault tolerance - customer always gets response regardless of tag/pipeline failures'
   });
 });
 

@@ -10,7 +10,7 @@ class AIService {
       throw new Error("OpenAI API key missing. Add OPENAI_API_KEY to .env file.");
     }
 
-    console.log("✅ OpenAI initialized (Optimized for Token Limits)");
+    console.log("✅ OpenAI initialized (Spanish Only - ReparaloYA)");
 
     this.openai = new OpenAI({
       apiKey,
@@ -27,9 +27,9 @@ class AIService {
 
     const queryLower = query.toLowerCase();
     
-    // Extract device and service keywords
+    // Extract device and service keywords (including Spanish terms)
     const deviceKeywords = queryLower.match(/iphone|samsung|huawei|xiaomi|motorola|nokia|lg|sony|apple|google|pixel|honor|oppo|vivo|realme|oneplus|asus|caterpillar|lenovo|tcl|tecno|wiko|zte/g) || [];
-    const serviceKeywords = queryLower.match(/battery|bateria|screen|pantalla|display|speaker|altavoz|camera|camara|charging|carga|conector|touch|tactil|flex|tapa|cover|glass|vidrio|agua|water|repair|reparar/g) || [];
+    const serviceKeywords = queryLower.match(/battery|bateria|batería|screen|pantalla|display|speaker|altavoz|camera|camara|cámara|charging|carga|conector|touch|tactil|táctil|flex|tapa|cover|glass|vidrio|agua|water|repair|reparar|reparación/g) || [];
     const modelKeywords = queryLower.match(/\b\d+[\w\s]*(?:pro|max|plus|mini|lite|se|ultra|note|edge|fold|flip)?\b/g) || [];
 
     console.log(`🔍 Searching with keywords:`, {
@@ -128,14 +128,13 @@ class AIService {
       console.error("❌ AI processing error:", err);
 
       return {
-        customer_response:
-          "Merci pour votre message ! Nous traitons votre demande et vous répondrons bientôt. Pour les urgences, appelez-nous directement. Site: reparaloya.com.uy",
+        customer_response: "¡Gracias por tu mensaje! Estamos procesando tu consulta y te responderemos pronto. Para urgencias, llámanos al 2200-21-91 o WhatsApp 098565349.",
         classification: {
           device_brand: "unknown",
           device_model: "unknown",
-          service_type: "general inquiry",
+          service_type: "consulta general",
           urgency: "medium",
-          language: "fr",
+          language: "es",
           confidence: "low",
         },
         error: err.message,
@@ -144,7 +143,7 @@ class AIService {
   }
 
   // =================================================
-  // ✅ AUDIO TRANSCRIPTION (Fixed Model)
+  // ✅ AUDIO TRANSCRIPTION (Spanish optimized)
   // =================================================
   async transcribeAudio(mediaUrl) {
     try {
@@ -165,7 +164,7 @@ class AIService {
       const transcription = await this.openai.audio.transcriptions.create({
         file: file,
         model: "whisper-1",
-        language: "fr", // French language hint for better accuracy
+        language: "es", // Spanish language hint for better accuracy
         response_format: "text"
       });
 
@@ -173,59 +172,56 @@ class AIService {
       return transcription;
     } catch (err) {
       console.error("❌ Transcription error:", err.message);
-      return `[Erreur de transcription audio: ${err.message}]`;
+      return `[Error de transcripción de audio: ${err.message}]`;
     }
   }
 
-// =================================================
-// ✅ IMAGE ANALYSIS (NEW Responses API + New Image Format)
-// =================================================
-// =================================================
-// ✅ IMAGE ANALYSIS (NEW Responses API + Correct Types)
-// =================================================
-async analyzeImage(imageUrl) {
-  try {
-    if (!imageUrl) throw new Error("Missing image URL");
+  // =================================================
+  // ✅ IMAGE ANALYSIS (Spanish responses)
+  // =================================================
+  async analyzeImage(imageUrl) {
+    try {
+      if (!imageUrl) throw new Error("Missing image URL");
 
-    const result = await this.openai.responses.create({
-      model: "gpt-4o-mini",
-      input: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "input_text",   // ✅ FIXED
-              text:
-                "Analyse cette image et identifie le modèle de l'appareil, les dommages visibles et le type de réparation probable. Réponds en français, maximum 200 mots."
-            },
-            {
-              type: "input_image",  // ✅ Correct image type
-              image_url: imageUrl
-            }
-          ]
-        }
-      ],
-      max_output_tokens: 300,
-      temperature: 0.3
-    });
+      const result = await this.openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Analiza esta imagen e identifica el modelo del dispositivo, los daños visibles y el tipo de reparación probable. Responde en español, máximo 200 palabras."
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: imageUrl
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 300,
+        temperature: 0.3
+      });
 
-    const text = result.output_text;
-    console.log("✅ Image analysis:", text);
-    return text;
+      const text = result.choices[0].message.content;
+      console.log("✅ Image analysis:", text);
+      return text;
 
-  } catch (err) {
-    console.error("❌ Image analysis error:", err.message);
-
-    return `[Erreur d'analyse d'image: Impossible d'analyser l'image. Veuillez décrire votre problème par texto.]`;
+    } catch (err) {
+      console.error("❌ Image analysis error:", err.message);
+      return `[Error de análisis de imagen: No se puede analizar la imagen. Por favor describe tu problema por texto.]`;
+    }
   }
-}
 
   // =================================================
-  // ✅ OPTIMIZED UNIFIED RESPONSE (Smart Token Management)
+  // ✅ UNIFIED RESPONSE (Spanish Only - ReparaloYA Business)
   // =================================================
   async generateUnifiedResponse(processedContent, messageType, pricingData, contactInfo) {
     try {
-      // 🚀 GET ONLY RELEVANT PRICING DATA (Solves token limit!)
+      // 🚀 GET ONLY RELEVANT PRICING DATA
       const relevantPricing = this.getRelevantPricing(pricingData.items || [], processedContent);
       
       console.log(`📊 Using ${relevantPricing.length} relevant pricing items (instead of ${(pricingData.items || []).length} total items)`);
@@ -239,57 +235,54 @@ async analyzeImage(imageUrl) {
         })
         .join('\n');
 
-      // Detect customer language for appropriate response
-      const isEnglish = /\b(hello|hi|battery|screen|repair|cost|price|how much)\b/i.test(processedContent);
-      const isSpanish = /\b(hola|batería|pantalla|reparar|cuánto|precio|costo)\b/i.test(processedContent);
-      const detectedLanguage = isEnglish ? 'en' : isSpanish ? 'es' : 'fr';
+      const systemPrompt = `Eres el asistente virtual de ReparaloYA, especialistas en reparación de celulares en Montevideo, Uruguay.
 
-      const systemPrompt = `You are Reparaloya's AI assistant (reparaloya.com.uy) - Uruguay's phone repair experts.
+REGLAS CRÍTICAS:
+1. SOLO usa precios de la base de datos abajo - NUNCA inventes precios
+2. Responde ÚNICAMENTE en español
+3. Sé amable y siempre alienta a agendar para un servicio mejor y más rápido
+4. Usa técnicas persuasivas para cerrar ventas
+5. Interpreta correctamente términos del cliente (ej: "tapa trasera" = "vidrio trasero")
+6. Mantén la conversación activa para recopilar información
+7. Devuelve SOLO JSON válido - sin texto extra
 
-CRITICAL RULES:
-1. ONLY use prices from the database below - NEVER guess or estimate
-2. Match intelligently: "iPhone 13 battery" = "BATERIA IPHONE 13"  
-3. Respond in detected language: ${detectedLanguage}
-4. Always mention reparaloya.com.uy and 30-day warranty
-5. Return ONLY valid JSON - no extra text
-
-RELEVANT PRICING DATABASE (${relevantPricing.length} items):
+BASE DE DATOS DE PRECIOS (${relevantPricing.length} artículos):
 ${pricingText}
 
-BUSINESS INFO:
-- Website: reparaloya.com.uy  
-- Hours: 9h-18h, Monday-Saturday
-- Services: screen, battery, charging port, water damage, camera, speaker repairs
-- Warranty: 30 days on all repairs
-- Specialty: smartphones, tablets, Apple Watch
+INFORMACIÓN DEL NEGOCIO:
+SUCURSALES:
+- La Comercial: Carlos Reyles 1750, esq. José L. Terra, Lunes a Viernes 10:00-12:30 y 13:00-18:00, Sábados 09:00-13:00
+- Pocitos: Chucarro 1107, esq. Masini, Lunes a Viernes 10:00-18:00, Sábados 09:00-13:00  
+- Tres Cruces: Mario Cassinoni 1684, Lunes a Viernes 10:00-18:00, Sábados 09:00-13:00
 
-LANGUAGE RESPONSES:
-- English: Professional, helpful, mention appointment booking
-- Spanish: Amigable y profesional, mencionar cita
-- French: Amical et professionnel, mentionner rendez-vous
+SERVICIOS:
+- Reparación de smartphones, tablets, Apple Watch
+- Retiro y entrega a domicilio en Montevideo (costo varía según zona)
+- Garantía: 30 días en todas las reparaciones
+- WhatsApp: 098565349
+- Teléfono: 2200-21-91
 
-REQUIRED JSON FORMAT:
+FORMATO JSON REQUERIDO:
 {
-  "customer_response": "Response in detected language with exact pricing when found",
+  "customer_response": "Respuesta en español con precios exactos cuando se encuentren",
   "classification": {
     "device_brand": "Apple/Samsung/Huawei/Xiaomi/etc",
-    "device_model": "specific model",
-    "service_type": "screen/battery/charging/camera/speaker/water_damage/general",
+    "device_model": "modelo específico",
+    "service_type": "pantalla/bateria/carga/camara/altavoz/agua/general",
     "urgency": "low/medium/high", 
-    "language": "${detectedLanguage}",
+    "language": "es",
     "confidence": "high/medium/low"
   }
 }`;
 
-      const userPrompt = `Customer message: "${processedContent}"
-Message type: ${messageType}
-Customer: ${contactInfo.full_name || "Customer"}
+      const userPrompt = `Mensaje del cliente: "${processedContent}"
+Tipo de mensaje: ${messageType}
+Cliente: ${contactInfo.full_name || "Cliente"}
 
-Find relevant pricing and respond appropriately.`;
+Encuentra precios relevantes y responde apropiadamente. Mantén la conversación activa preguntando sobre la cotización, si les parece caro, si el servicio es lento, o si la ubicación está lejos.`;
 
-      // Use GPT-3.5-turbo for better token efficiency
       const result = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo-16k", // Higher token limit, more cost-effective
+        model: "gpt-3.5-turbo-16k",
         messages: [
           {
             role: "system",
@@ -300,8 +293,8 @@ Find relevant pricing and respond appropriately.`;
             content: userPrompt
           }
         ],
-        temperature: 0.3, // Consistent responses
-        max_tokens: 800   // Controlled output length
+        temperature: 0.3,
+        max_tokens: 800
       });
 
       let content = result.choices[0].message.content.trim();
@@ -322,7 +315,7 @@ Find relevant pricing and respond appropriately.`;
         console.error("❌ JSON parse error, raw content:", content);
         
         // Create fallback response
-        const fallbackResponse = this.createFallbackResponse(processedContent, detectedLanguage, contactInfo);
+        const fallbackResponse = this.createFallbackResponse(processedContent, contactInfo);
         return fallbackResponse;
       }
 
@@ -336,9 +329,9 @@ Find relevant pricing and respond appropriately.`;
         classification: {
           device_brand: parsed.classification.device_brand || "unknown",
           device_model: parsed.classification.device_model || "unknown", 
-          service_type: parsed.classification.service_type || "general inquiry",
+          service_type: parsed.classification.service_type || "consulta general",
           urgency: parsed.classification.urgency || "medium",
-          language: parsed.classification.language || detectedLanguage,
+          language: "es", // Always Spanish
           confidence: parsed.classification.confidence || "medium"
         },
         processed_content: processedContent,
@@ -349,64 +342,40 @@ Find relevant pricing and respond appropriately.`;
 
     } catch (err) {
       console.error("❌ Unified response error:", err.message);
-      
-      // Return appropriate fallback response
-      const detectedLanguage = /hello|hi|battery|screen/i.test(processedContent) ? 'en' : 
-                              /hola|batería|pantalla/i.test(processedContent) ? 'es' : 'fr';
-      
-      return this.createFallbackResponse(processedContent, detectedLanguage, contactInfo);
+      return this.createFallbackResponse(processedContent, contactInfo);
     }
   }
 
   // =================================================
-  // ✅ FALLBACK RESPONSE CREATOR
+  // ✅ FALLBACK RESPONSE (Spanish Only)
   // =================================================
-  createFallbackResponse(processedContent, language, contactInfo) {
-    let fallbackResponse;
-    
-    if (language === 'en') {
-      fallbackResponse = `Hello ${contactInfo.full_name || 'there'}! Thank you for contacting Reparaloya! 🔧📱
+  createFallbackResponse(processedContent, contactInfo) {
+    const fallbackResponse = `¡Hola ${contactInfo.full_name || ''}! ¡Gracias por contactar ReparaloYA! 🔧📱
 
-We're experiencing a brief technical issue but our team will respond soon during business hours (9h-18h, Monday-Saturday).
+Estamos experimentando un problema técnico temporal, pero nuestro equipo te responderá pronto durante nuestro horario comercial.
 
-For urgent repairs, please call us directly.
-🌐 More info: reparaloya.com.uy
-✨ 30-day warranty on all repairs
-📱 We specialize in smartphone & tablet repairs
+Para reparaciones urgentes:
+📞 Teléfono: 2200-21-91  
+📱 WhatsApp: 098565349
 
-We're here to help!`;
-    } else if (language === 'es') {
-      fallbackResponse = `¡Hola ${contactInfo.full_name || ''}! ¡Gracias por contactar Reparaloya! 🔧📱
+🏪 NUESTRAS SUCURSALES:
+• La Comercial: Carlos Reyles 1750, esq. José L. Terra
+• Pocitos: Chucarro 1107, esq. Masini  
+• Tres Cruces: Mario Cassinoni 1684
 
-Estamos experimentando un problema técnico temporal, pero nuestro equipo responderá pronto durante el horario comercial (9h-18h, lunes a sábado).
-
-Para reparaciones urgentes, por favor llámenos directamente.
-🌐 Más información: reparaloya.com.uy  
 ✨ Garantía de 30 días en todas las reparaciones
-📱 Nos especializamos en reparaciones de smartphones y tablets
+🚚 Retiro y entrega a domicilio disponible
 
-¡Estamos aquí para ayudar!`;
-    } else {
-      fallbackResponse = `Bonjour ${contactInfo.full_name || ''}! Merci de nous avoir contactés chez Reparaloya! 🔧📱
-
-Nous rencontrons un problème technique temporaire, mais notre équipe vous répondra bientôt pendant nos heures d'ouverture (9h-18h, lundi au samedi).
-
-Pour les réparations urgentes, veuillez nous appeler directement.
-🌐 Plus d'informations: reparaloya.com.uy
-✨ Garantie de 30 jours sur toutes nos réparations  
-📱 Nous nous spécialisons dans les réparations de smartphones et tablettes
-
-Nous sommes là pour vous aider!`;
-    }
+¡Estamos aquí para ayudarte!`;
 
     return {
       customer_response: fallbackResponse,
       classification: {
         device_brand: "unknown",
         device_model: "unknown",
-        service_type: "general inquiry",
+        service_type: "consulta general",
         urgency: "medium",
-        language: language,
+        language: "es",
         confidence: "low",
       },
       processed_content: processedContent,
