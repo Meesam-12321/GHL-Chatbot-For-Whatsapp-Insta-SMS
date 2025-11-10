@@ -1,0 +1,178 @@
+{
+  "contact_id": "BTnPcbtct9rWFWJg9tbW",
+  "created": "2025-11-10T09:28:09.537Z",
+  "last_updated": "2025-11-10T11:06:45.880Z",
+  "message_count": 10,
+  "messages": [
+    {
+      "timestamp": "2025-11-10T09:28:09.537Z",
+      "role": "user",
+      "content": "Hello there I have all kinds of iPhones and all of them require screen replacements, can you tell me the prices of all the options you provide regarding iphones",
+      "metadata": {
+        "message_id": "msg_1762766889537_vnye6nehl",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "instagram",
+        "contact_name": "Meesam Imran"
+      }
+    },
+    {
+      "timestamp": "2025-11-10T09:28:14.502Z",
+      "role": "assistant",
+      "content": "¡Hola Meesam Imran! ¡Bienvenido de vuelta a ReparaloYA! Para los iPhones, contamos con una variedad de opciones de pantallas para la reparación. ¿Podrías indicarme específicamente los modelos de iPhones que necesitas reparar para poder brindarte los precios exactos? ¡Estoy aquí para ayudarte con toda la información que necesites! 😊📱",
+      "metadata": {
+        "message_id": "msg_1762766894502_vveel3rnk",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "unknown",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium",
+          "conversation_context": "returning"
+        },
+        "pricing_items_found": 60
+      }
+    },
+    {
+      "timestamp": "2025-11-10T09:29:56.326Z",
+      "role": "user",
+      "content": "List all the models and prices of all of them separately and also all qualities and their prices",
+      "metadata": {
+        "message_id": "msg_1762766996326_jhh39tdde",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "instagram",
+        "contact_name": "Meesam Imran"
+      }
+    },
+    {
+      "timestamp": "2025-11-10T09:30:00.872Z",
+      "role": "assistant",
+      "content": "¡Hola Meesam Imran! En nuestro catálogo contamos con una amplia variedad de modelos y calidades de pantallas y otros productos. ¿Estás buscando información sobre algún modelo en particular o necesitas conocer todos los precios y opciones disponibles? Estoy aquí para ayudarte. ¡Pregunta lo que necesites!",
+      "metadata": {
+        "message_id": "msg_1762767000872_6uvo528bh",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "LG",
+          "device_model": "unknown",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium",
+          "conversation_context": "returning"
+        },
+        "pricing_items_found": 60
+      }
+    },
+    {
+      "timestamp": "2025-11-10T09:32:48.555Z",
+      "role": "user",
+      "content": "My iPhone 11 screen is broken",
+      "metadata": {
+        "message_id": "msg_1762767168555_lcbs4da9r",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "instagram",
+        "contact_name": "Meesam Imran"
+      }
+    },
+    {
+      "timestamp": "2025-11-10T09:32:51.256Z",
+      "role": "assistant",
+      "content": "¡Hola Meesam! Lamento escuchar que la pantalla de tu iPhone 11 se rompió. ¿Recuerdas qué tipo de calidad de pantalla estás buscando para la reparación? ¿Prefieres la original, compatible, incell u OLED? ¡Estoy aquí para ayudarte a encontrar la mejor opción de reparación!",
+      "metadata": {
+        "message_id": "msg_1762767171256_kkvwte2pb",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 11",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium",
+          "conversation_context": "returning"
+        },
+        "pricing_items_found": 60
+      }
+    },
+    {
+      "timestamp": "2025-11-10T09:51:46.852Z",
+      "role": "user",
+      "content": "My iPhone 11 screen is broken",
+      "metadata": {
+        "message_id": "msg_1762768306852_hxx7631me",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "instagram",
+        "contact_name": "Meesam Imran"
+      }
+    },
+    {
+      "timestamp": "2025-11-10T09:51:46.855Z",
+      "role": "assistant",
+      "content": "¡Hola de nuevo Meesam Imran! ¡Gracias por contactar ReparaloYA! 🔧📱\n\nVeo que ya habíamos conversado antes. Nuestro equipo te responderá pronto durante nuestro horario comercial.\n\nPara reparaciones urgentes:\n📞 Teléfono: 2200-21-91  \n📱 WhatsApp: 098565349\n\n🏪 NUESTRAS SUCURSALES:\n• La Comercial: Carlos Reyles 1750, esq. José L. Terra\n• Pocitos: Chucarro 1107, esq. Masini  \n• Tres Cruces: Mario Cassinoni 1684\n\n✨ Garantía de 30 días en todas las reparaciones\n🚚 Retiro y entrega a domicilio disponible\n\n¡Estamos aquí para ayudarte!",
+      "metadata": {
+        "message_id": "msg_1762768306855_6bqgcpcbo",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "unknown",
+          "device_model": "unknown",
+          "service_type": "consulta general",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "low",
+          "conversation_context": "returning"
+        },
+        "pricing_items_found": 0
+      }
+    },
+    {
+      "timestamp": "2025-11-10T11:06:40.736Z",
+      "role": "user",
+      "content": "My iPhone 11 screen is broken",
+      "metadata": {
+        "message_id": "msg_1762772800736_kql8sz0dm",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "instagram",
+        "contact_name": "Meesam Imran"
+      }
+    },
+    {
+      "timestamp": "2025-11-10T11:06:45.880Z",
+      "role": "assistant",
+      "content": "Para la reparación de la pantalla de tu iPhone 11, tenemos las siguientes opciones disponibles:\n- Pantalla original: 2595 UYU\n- Pantalla standard: 4900 UYU\n- Pantalla original: 6880 UYU\n\n¿Te gustaría saber más detalles sobre alguna de estas opciones o necesitas información adicional?",
+      "metadata": {
+        "message_id": "msg_1762772805880_wxho5a8yz",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 11",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium",
+          "conversation_context": "returning"
+        },
+        "pricing_items_found": 60
+      }
+    }
+  ]
+}

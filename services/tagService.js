@@ -1,197 +1,294 @@
 const axios = require('axios');
 
-class TagService {
+class SimplifiedTagService {
   constructor() {
     this.apiKey = process.env.GHL_API_KEY;
     this.baseUrl = 'https://services.leadconnectorhq.com';
-    this.apiVersion = '2021-07-28';
-  }
-
-  /**
-   * Add tags to contact without overwriting existing ones
-   * @param {string} contactId - GHL contact ID
-   * @param {string[]} newTags - Array of new tags to add
-   * @returns {Promise<Object|null>} - API response or null if failed
-   */
-  async addTags(contactId, newTags) {
-    try {
-      if (!contactId) {
-        console.log('⚠️ TagService: No contact ID provided');
-        return null;
-      }
-
-      if (!newTags || newTags.length === 0) {
-        console.log('📋 TagService: No tags to add');
-        return null;
-      }
-
-      // Filter out empty/invalid tags
-      const validTags = newTags.filter(tag => tag && tag.trim());
-      if (validTags.length === 0) {
-        console.log('📋 TagService: No valid tags after filtering');
-        return null;
-      }
-
-      console.log(`🏷️ TagService: Adding tags [${validTags.join(', ')}] to contact ${contactId}`);
+    
+    // ONLY brand tags (as client requested)
+    this.brandTags = {
+      'iphone': 'iPhone',
+      'apple': 'iPhone', 
+      'samsung': 'Samsung',
+      'galaxy': 'Samsung',
+      'huawei': 'Huawei',
+      'xiaomi': 'Xiaomi',
+      'redmi': 'Xiaomi',
+      'mi': 'Xiaomi',
+      'motorola': 'Motorola',
+      'moto': 'Motorola',
+      'nokia': 'Nokia',
+      'lg': 'LG',
+      'sony': 'Sony',
+      'google': 'Google',
+      'pixel': 'Google',
+      'honor': 'Honor',
+      'oppo': 'Oppo',
+      'vivo': 'Vivo',
+      'realme': 'Realme',
+      'oneplus': 'OnePlus',
+      'asus': 'Asus',
+      'caterpillar': 'Caterpillar',
+      'cat': 'Caterpillar',
+      'lenovo': 'Lenovo',
+      'tcl': 'TCL',
+      'tecno': 'Tecno',
+      'wiko': 'Wiko',
+      'zte': 'ZTE'
+    };
+    
+    // ONLY service/repair type tags (as client requested)
+    this.serviceTags = {
+      'pantalla': 'Pantalla',
+      'display': 'Pantalla',
+      'screen': 'Pantalla',
+      'lcd': 'Pantalla',
+      'oled': 'Pantalla',
+      'tactil': 'Pantalla',
+      'táctil': 'Pantalla',
+      'touch': 'Pantalla',
       
-      // Step 1: Get current contact tags
-      const currentTags = await this._getCurrentTags(contactId);
-      if (currentTags === null) {
-        console.error('❌ TagService: Failed to get current tags, aborting tag update');
-        return null;
-      }
-
-      // Step 2: Merge tags (remove duplicates)
-      const uniqueTags = [...new Set([...currentTags, ...validTags])];
-      console.log('📋 TagService: Final tag list:', uniqueTags);
-
-      // Step 3: Update contact
-      const result = await this._updateContactTags(contactId, uniqueTags);
+      'bateria': 'Batería',
+      'batería': 'Batería',
+      'battery': 'Batería',
       
-      if (result) {
-        console.log('✅ TagService: Tags updated successfully');
-        return result;
-      } else {
-        console.error('❌ TagService: Failed to update tags');
-        return null;
-      }
-
-    } catch (error) {
-      console.error('❌ TagService: Unexpected error in addTags:', error.message);
-      return null;
-    }
+      'camara': 'Cámara',
+      'cámara': 'Cámara',
+      'camera': 'Cámara',
+      'lente': 'Cámara',
+      
+      'carga': 'Carga',
+      'charging': 'Carga',
+      'conector': 'Carga',
+      'puerto': 'Carga',
+      'usb': 'Carga',
+      'lightning': 'Carga',
+      'tipo-c': 'Carga',
+      'type-c': 'Carga',
+      
+      'altavoz': 'Altavoz',
+      'speaker': 'Altavoz',
+      'audio': 'Altavoz',
+      'sonido': 'Altavoz',
+      
+      'vidrio': 'Vidrio',
+      'glass': 'Vidrio',
+      'cristal': 'Vidrio',
+      'tapa': 'Vidrio',
+      'cover': 'Vidrio',
+      'back': 'Vidrio',
+      'trasera': 'Vidrio',
+      
+      'flex': 'Flex',
+      'flexible': 'Flex',
+      'cable': 'Flex',
+      
+      'agua': 'Agua',
+      'water': 'Agua',
+      'mojado': 'Agua',
+      'humedad': 'Agua'
+    };
+    
+    console.log('🏷️ Simplified Tag Service initialized (Brand + Repair Type ONLY)');
   }
-
+  
   /**
-   * Generate tags from AI classification
+   * Generate ONLY brand and repair type tags (as client requested)
    * @param {Object} classification - AI classification result
-   * @returns {string[]} - Array of generated tags
+   * @returns {Array} Array of tag names to add (ONLY brand + service)
    */
   generateTagsFromClassification(classification) {
     try {
-      const tags = [];
+      const tags = []; // Simple array, no duplicates needed
       
-      // Add device brand tag
-      if (classification.device_brand && classification.device_brand !== 'unknown') {
-        tags.push(classification.device_brand);
+      console.log('🔄 Generating simplified tags from classification:', classification);
+      
+      // Add brand tag (if found)
+      const brandTag = this._getBrandTag(classification);
+      if (brandTag) {
+        tags.push(brandTag);
+        console.log(`📱 Added brand tag: ${brandTag}`);
       }
       
-      // Add service type tag with Spanish translations
-      if (classification.service_type && classification.service_type !== 'general inquiry') {
-        const serviceTypeMap = {
-          'screen': 'Pantalla',
-          'battery': 'Batería', 
-          'charging': 'Carga',
-          'camera': 'Cámara',
-          'speaker': 'Altavoz',
-          'water_damage': 'Daño por agua'
+      // Add service/repair type tag (if found)
+      const serviceTag = this._getServiceTag(classification);
+      if (serviceTag) {
+        tags.push(serviceTag);
+        console.log(`🔧 Added service tag: ${serviceTag}`);
+      }
+      
+      console.log(`✅ Generated ${tags.length} simplified tags:`, tags);
+      
+      return tags;
+      
+    } catch (error) {
+      console.error('❌ Error generating simplified tags:', error.message);
+      return []; // Return empty array if error
+    }
+  }
+  
+  /**
+   * Add tags to contact with retry logic
+   * @param {string} contactId - GHL contact ID
+   * @param {Array} tags - Array of tag names
+   * @param {string} locationId - GHL location ID
+   * @returns {Promise<Object>} Result object
+   */
+  async addTags(contactId, tags, locationId = null) {
+    const maxRetries = 3;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        if (!contactId || !tags || tags.length === 0) {
+          console.log('⚠️ Invalid parameters for adding tags');
+          return { success: false, error: 'Invalid parameters' };
+        }
+        
+        const location = locationId || process.env.GHL_LOCATION_ID || 'hij5g6beL7ebCFVa1fyq';
+        
+        console.log(`🏷️ Adding ${tags.length} simplified tags to contact ${contactId} (attempt ${attempt + 1}/${maxRetries})`);
+        console.log('📋 Tags to add:', tags);
+        
+        const response = await axios.post(
+          `${this.baseUrl}/contacts/${contactId}/tags`,
+          { tags: tags },
+          {
+            headers: {
+              'Authorization': `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-04-15'
+            },
+            timeout: 15000
+          }
+        );
+        
+        console.log('✅ Simplified tags added successfully');
+        
+        return {
+          success: true,
+          data: response.data,
+          tags_added: tags,
+          attempt: attempt + 1
         };
         
-        const spanishService = serviceTypeMap[classification.service_type] || classification.service_type;
-        tags.push(spanishService);
+      } catch (error) {
+        attempt++;
+        
+        const errorMsg = error.response?.data?.message || error.message;
+        console.error(`❌ Simplified tag addition attempt ${attempt} failed:`, {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          error: errorMsg
+        });
+        
+        if (attempt >= maxRetries) {
+          return {
+            success: false,
+            error: `All ${maxRetries} attempts failed. Last error: ${errorMsg}`,
+            final_attempt: true
+          };
+        }
+        
+        // Wait before retry with exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
       }
-      
-      // Add urgency tag for high priority
-      if (classification.urgency === 'high') {
-        tags.push('Urgente');
-      }
-      
-      // Add source tag
-      tags.push('ChatBot AI');
-      
-      // Add language tag
-      if (classification.language) {
-        const langMap = {
-          'en': 'English',
-          'es': 'Español', 
-          'fr': 'Français'
+    }
+  }
+  
+  /**
+   * Smart tag update - only add new tags, don't duplicate
+   * @param {string} contactId - GHL contact ID
+   * @param {Array} newTags - Tags to add
+   * @param {string} locationId - GHL location ID
+   * @returns {Promise<Object>} Result object
+   */
+  async updateTagsSmart(contactId, newTags, locationId = null) {
+    try {
+      if (newTags.length === 0) {
+        console.log('✅ No tags to add');
+        return {
+          success: true,
+          message: 'No tags to add',
+          existing_tags: 0,
+          new_tags: 0
         };
-        const languageTag = langMap[classification.language] || classification.language;
-        tags.push(languageTag);
       }
       
-      const finalTags = tags.filter(tag => tag && tag.trim());
-      console.log('🏷️ TagService: Generated tags:', finalTags);
-      return finalTags;
-
+      // Add tags (GHL handles duplicates automatically)
+      const result = await this.addTags(contactId, newTags, locationId);
+      
+      return {
+        ...result,
+        new_tags: newTags.length
+      };
+      
     } catch (error) {
-      console.error('❌ TagService: Error generating tags:', error.message);
-      return [];
+      console.error('❌ Smart tag update failed:', error.message);
+      return {
+        success: false,
+        error: error.message
+      };
     }
   }
-
+  
   /**
-   * Get current tags for a contact
+   * Get brand tag from classification
    * @private
-   * @param {string} contactId - GHL contact ID
-   * @returns {Promise<string[]|null>} - Array of current tags or null if failed
    */
-  async _getCurrentTags(contactId) {
-    try {
-      const response = await axios.get(
-        `${this.baseUrl}/contacts/${contactId}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Version': this.apiVersion
-          },
-          timeout: 10000
-        }
-      );
-
-      const currentTags = response.data.contact.tags || [];
-      console.log('📋 TagService: Current tags:', currentTags);
-      return currentTags;
-
-    } catch (error) {
-      console.error('❌ TagService: Failed to get current tags:', error.response?.data || error.message);
-      return null;
-    }
+  _getBrandTag(classification) {
+    const brand = (classification.device_brand || 
+                  classification.marca_dispositivo || 
+                  classification.marque_appareil || 
+                  '').toLowerCase();
+    
+    return this.brandTags[brand] || null;
   }
-
+  
   /**
-   * Update contact tags
+   * Get service tag from classification
    * @private
-   * @param {string} contactId - GHL contact ID
-   * @param {string[]} tags - Array of all tags
-   * @returns {Promise<Object|null>} - API response or null if failed
    */
-  async _updateContactTags(contactId, tags) {
-    try {
-      const response = await axios.put(
-        `${this.baseUrl}/contacts/${contactId}`,
-        { tags: tags },
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Content-Type': 'application/json',
-            'Version': this.apiVersion
-          },
-          timeout: 10000
-        }
-      );
-
-      return response.data;
-
-    } catch (error) {
-      console.error('❌ TagService: Failed to update contact tags:', error.response?.data || error.message);
-      return null;
-    }
+  _getServiceTag(classification) {
+    const service = (classification.service_type || 
+                    classification.tipo_servicio || 
+                    classification.type_service || 
+                    '').toLowerCase();
+    
+    return this.serviceTags[service] || null;
   }
-
+  
   /**
-   * Health check for TagService
-   * @returns {Object} - Service health status
+   * Get service health status
    */
   getHealthStatus() {
     return {
-      service: 'TagService',
-      status: this.apiKey ? 'ready' : 'missing_api_key',
-      hasApiKey: !!this.apiKey,
-      baseUrl: this.baseUrl,
-      version: '1.0.0'
+      service: 'SimplifiedTagService',
+      status: 'ready',
+      version: '1.0.0-simplified',
+      features: {
+        brand_tags: Object.keys(this.brandTags).length,
+        service_tags: Object.keys(this.serviceTags).length,
+        extra_tags: 0, // No extra tags in simplified version
+        smart_update: true,
+        retry_logic: true
+      },
+      api_endpoint: this.baseUrl,
+      has_api_key: !!this.apiKey,
+      note: 'Simplified version - ONLY brand and repair type tags as requested'
+    };
+  }
+  
+  /**
+   * Get available tag categories (simplified)
+   */
+  getAvailableTagCategories() {
+    return {
+      brands: Object.values(this.brandTags),
+      services: Object.values(this.serviceTags),
+      note: 'Only brand and service tags - no extra system tags'
     };
   }
 }
 
-module.exports = new TagService();
+module.exports = new SimplifiedTagService();
