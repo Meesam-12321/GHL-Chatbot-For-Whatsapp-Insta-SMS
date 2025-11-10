@@ -175,12 +175,14 @@ class EnhancedPricingService {
   }
   
   /**
-   * Get ALL quality options for a specific device/service combination
+   * Get ALL quality options for a specific device/service - FIXED EXACT MATCHING
    */
   async findAllQualityOptions(device, service) {
     try {
       const query = `${device} ${service}`;
       const allResults = await this.findRelevantProducts(query, 100);
+      
+      console.log(`🔍 Filtering results for EXACT device match: "${device}"`);
       
       // Group by device and service to find all quality variants
       const qualityGroups = new Map();
@@ -188,8 +190,8 @@ class EnhancedPricingService {
       for (const item of allResults) {
         const enhanced = item._enhanced;
         
-        // Check if this item matches the device and service
-        if (this._matchesDeviceAndService(enhanced, device, service)) {
+        // STRICT EXACT MATCHING - no more iPhone 14 Plus when searching iPhone 14
+        if (this._exactDeviceAndServiceMatch(enhanced, device, service)) {
           const baseKey = `${enhanced.brand}_${enhanced.device}_${enhanced.service}`;
           
           if (!qualityGroups.has(baseKey)) {
@@ -200,7 +202,8 @@ class EnhancedPricingService {
             ...item,
             quality: enhanced.quality,
             price: this._extractValidPrice(item),
-            baseKey
+            baseKey,
+            originalName: enhanced.originalName
           });
         }
       }
@@ -218,7 +221,17 @@ class EnhancedPricingService {
         });
       }
       
-      console.log(`🎯 Found ${result.length} quality groups for ${device} ${service}`);
+      console.log(`🎯 Found ${result.length} quality groups for EXACT match: ${device} ${service}`);
+      
+      // Debug logging for iPhone 14 issue
+      if (device.includes('iphone 14') && !device.includes('plus') && !device.includes('pro')) {
+        console.log('🔍 DEBUG - iPhone 14 exact matching results:');
+        result.forEach(group => {
+          group.options.forEach(option => {
+            console.log(`  - ${option.originalName}: ${option.price} UYU`);
+          });
+        });
+      }
       
       return result;
       
@@ -237,8 +250,8 @@ class EnhancedPricingService {
     // Extract device brand
     const brand = this._extractBrand(productName);
     
-    // Extract device model
-    const device = this._extractDevice(productName);
+    // Extract device model - PRECISE MATCHING
+    const device = this._extractDevicePrecise(productName);
     
     // Extract service type
     const service = this._extractService(productName);
@@ -283,13 +296,42 @@ class EnhancedPricingService {
   }
   
   /**
-   * Extract device model from product name
+   * Extract device model from product name - PRECISE MATCHING TO FIX iPhone 14/Plus issue
    */
-  _extractDevice(productName) {
-    // iPhone models
-    const iphoneMatch = productName.match(/iphone\s*(\d+(?:\s*pro(?:\s*max)?)?|se|xr|xs(?:\s*max)?|x)/i);
-    if (iphoneMatch) {
-      return `iphone ${iphoneMatch[1].toLowerCase()}`;
+  _extractDevicePrecise(productName) {
+    // iPhone models - EXACT matching to avoid 14 Plus when searching for 14
+    const iphonePatterns = [
+      { pattern: /iphone\s*15\s*pro\s*max/i, model: 'iphone 15 pro max' },
+      { pattern: /iphone\s*15\s*pro/i, model: 'iphone 15 pro' },
+      { pattern: /iphone\s*15\s*plus/i, model: 'iphone 15 plus' },
+      { pattern: /iphone\s*15(?!\s*pro|plus)/i, model: 'iphone 15' },
+      { pattern: /iphone\s*14\s*pro\s*max/i, model: 'iphone 14 pro max' },
+      { pattern: /iphone\s*14\s*pro/i, model: 'iphone 14 pro' },
+      { pattern: /iphone\s*14\s*plus/i, model: 'iphone 14 plus' },
+      { pattern: /iphone\s*14(?!\s*pro|\s*plus)/i, model: 'iphone 14' }, // Negative lookahead
+      { pattern: /iphone\s*13\s*pro\s*max/i, model: 'iphone 13 pro max' },
+      { pattern: /iphone\s*13\s*pro/i, model: 'iphone 13 pro' },
+      { pattern: /iphone\s*13\s*mini/i, model: 'iphone 13 mini' },
+      { pattern: /iphone\s*13(?!\s*pro|\s*mini)/i, model: 'iphone 13' },
+      { pattern: /iphone\s*12\s*pro\s*max/i, model: 'iphone 12 pro max' },
+      { pattern: /iphone\s*12\s*pro/i, model: 'iphone 12 pro' },
+      { pattern: /iphone\s*12\s*mini/i, model: 'iphone 12 mini' },
+      { pattern: /iphone\s*12(?!\s*pro|\s*mini)/i, model: 'iphone 12' },
+      { pattern: /iphone\s*11\s*pro\s*max/i, model: 'iphone 11 pro max' },
+      { pattern: /iphone\s*11\s*pro/i, model: 'iphone 11 pro' },
+      { pattern: /iphone\s*11(?!\s*pro)/i, model: 'iphone 11' },
+      { pattern: /iphone\s*xs\s*max/i, model: 'iphone xs max' },
+      { pattern: /iphone\s*xs/i, model: 'iphone xs' },
+      { pattern: /iphone\s*xr/i, model: 'iphone xr' },
+      { pattern: /iphone\s*x(?!\s*s|r)/i, model: 'iphone x' },
+      { pattern: /iphone\s*se/i, model: 'iphone se' }
+    ];
+    
+    // Check iPhone patterns in order (most specific first)
+    for (const { pattern, model } of iphonePatterns) {
+      if (pattern.test(productName)) {
+        return model;
+      }
     }
     
     // Samsung Galaxy models
@@ -359,6 +401,27 @@ class EnhancedPricingService {
     }
     
     return 'standard';
+  }
+  
+  /**
+   * EXACT device and service matching - FIXED to prevent iPhone 14 Plus matching iPhone 14
+   */
+  _exactDeviceAndServiceMatch(enhanced, targetDevice, targetService) {
+    const deviceLower = targetDevice.toLowerCase().trim();
+    const serviceLower = targetService.toLowerCase().trim();
+    const enhancedDevice = enhanced.device.toLowerCase().trim();
+    const enhancedService = enhanced.service.toLowerCase().trim();
+    
+    // EXACT device matching - must be exactly the same
+    const deviceMatch = enhancedDevice === deviceLower;
+    
+    // Service matching
+    const serviceMatch = enhancedService === serviceLower || 
+                        enhanced.originalName.toLowerCase().includes(serviceLower);
+    
+    console.log(`🔍 Exact match check: "${enhancedDevice}" === "${deviceLower}" = ${deviceMatch}, service = ${serviceMatch}`);
+    
+    return deviceMatch && serviceMatch;
   }
   
   /**
@@ -540,23 +603,6 @@ class EnhancedPricingService {
     
     // Fallback - use first column
     return Object.values(item)[0] || '';
-  }
-  
-  /**
-   * Check if item matches device and service
-   */
-  _matchesDeviceAndService(enhanced, device, service) {
-    const deviceLower = device.toLowerCase();
-    const serviceLower = service.toLowerCase();
-    
-    const deviceMatch = enhanced.device.includes(deviceLower) || 
-                       enhanced.brand.includes(deviceLower) ||
-                       enhanced.originalName.toLowerCase().includes(deviceLower);
-    
-    const serviceMatch = enhanced.service.includes(serviceLower) ||
-                        enhanced.originalName.toLowerCase().includes(serviceLower);
-    
-    return deviceMatch && serviceMatch;
   }
   
   /**
