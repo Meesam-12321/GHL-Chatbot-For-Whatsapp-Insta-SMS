@@ -197,19 +197,57 @@ async function addTags(contactId, classification, locationId) {
   try {
     const tags = [];
     
-    // Add brand tag
-    if (classification.device_brand !== 'unknown') {
-      tags.push(classification.device_brand);
+    // Predefined brand tags - map AI classification to exact predefined tags
+    const brandMapping = {
+      'iphone': 'Apple',
+      'apple': 'Apple',
+      'samsung': 'Samsung',
+      'xiaomi': 'Xiaomi',
+      'huawei': 'Huawei',
+      'lg': 'LG',
+      'motorola': 'Motorola',
+      'sony': 'Sony'
+    };
+    
+    // Predefined service tags - map AI classification to exact predefined tags
+    const serviceMapping = {
+      'cambio de pantalla': 'Pantalla',
+      'reparacion de pantalla': 'Pantalla',
+      'pantalla': 'Pantalla',
+      'screen': 'Pantalla',
+      'cambio de bateria': 'Bateria',
+      'reparacion de bateria': 'Bateria',
+      'bateria': 'Bateria',
+      'battery': 'Bateria',
+      'camara': 'Camara',
+      'camera': 'Camara',
+      'altavoz': 'Altavoz',
+      'speaker': 'Altavoz',
+      'microfono': 'Microfono',
+      'microphone': 'Microfono'
+    };
+    
+    // Add brand tag if recognized
+    if (classification.device_brand && classification.device_brand !== 'unknown') {
+      const normalizedBrand = classification.device_brand.toLowerCase();
+      const predefinedBrand = brandMapping[normalizedBrand];
+      if (predefinedBrand) {
+        tags.push(predefinedBrand);
+      }
     }
     
-    // Add service tag
-    if (classification.service_type !== 'consulta general') {
-      tags.push(`Reparación ${classification.service_type}`);
+    // Add service tag if recognized
+    if (classification.service_type && classification.service_type !== 'consulta general') {
+      const normalizedService = classification.service_type.toLowerCase();
+      const predefinedService = serviceMapping[normalizedService];
+      if (predefinedService) {
+        tags.push(predefinedService);
+      }
     }
     
     if (tags.length === 0) return;
     
-    console.log('🏷️ Adding tags:', tags);
+    console.log('🏷️ Adding predefined tags:', tags);
     
     // Add tags via GHL API
     await axios.post(
