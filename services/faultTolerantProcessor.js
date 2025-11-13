@@ -1,10 +1,10 @@
 const TagService = require('./tagService');
-const OpportunityService = require('./opportunityService');
+// const OpportunityService = require('./opportunityService');
 
 class FaultTolerantProcessor {
   constructor() {
     this.tagService = TagService;
-    this.opportunityService = OpportunityService;
+    // this.opportunityService = OpportunityService;
   }
 
   /**
@@ -38,7 +38,7 @@ class FaultTolerantProcessor {
       // Step 2: Process pipeline (independent operation)
       try {
         console.log('📋 FaultTolerantProcessor: Processing pipeline...');
-        await this._processPipelineWithRetry(contactId, options.targetStage, results, 2, options.locationId);
+        // await this._processPipelineWithRetry(contactId, options.targetStage, results, 2, options.locationId);
       } catch (error) {
         console.error('❌ FaultTolerantProcessor: Pipeline processing failed completely:', error.message);
         results.pipeline.error = `Pipeline processing failed: ${error.message}`;
@@ -127,21 +127,21 @@ class FaultTolerantProcessor {
           await this._wait(1500 * attempt); // Progressive delay
         }
 
-        const pipelineSuccess = await this.opportunityService.updateStage(contactId, targetStage, locationId);
+        // const pipelineSuccess = await this.opportunityService.updateStage(contactId, targetStage, locationId);
         
-        if (pipelineSuccess) {
-          results.pipeline.success = true;
-          results.pipeline.data = { 
-            targetStage: targetStage,
-            contactId: contactId,
-            locationId: locationId,
-            attempt: attempt + 1 
-          };
-          console.log(`✅ FaultTolerantProcessor: Pipeline processed successfully on attempt ${attempt + 1}`);
-          return;
-        } else {
-          throw new Error('Opportunity service returned false');
-        }
+        // if (pipelineSuccess) {
+        //   results.pipeline.success = true;
+        //   results.pipeline.data = { 
+        //     targetStage: targetStage,
+        //     contactId: contactId,
+        //     locationId: locationId,
+        //     attempt: attempt + 1 
+        //   };
+        //   console.log(`✅ FaultTolerantProcessor: Pipeline processed successfully on attempt ${attempt + 1}`);
+        //   return;
+        // } else {
+        //   throw new Error('Opportunity service returned false');
+        // }
 
       } catch (error) {
         attempt++;
@@ -193,10 +193,10 @@ class FaultTolerantProcessor {
     try {
       console.log('📋 FaultTolerantProcessor: Processing pipeline only...');
       
-      const success = await this.opportunityService.updateStage(contactId, targetStage);
+      // const success = await this.opportunityService.updateStage(contactId, targetStage);
       
-      console.log(`${success ? '✅' : '❌'} FaultTolerantProcessor: Pipeline-only processing ${success ? 'succeeded' : 'failed'}`);
-      return success;
+      // console.log(`${success ? '✅' : '❌'} FaultTolerantProcessor: Pipeline-only processing ${success ? 'succeeded' : 'failed'}`);
+      // return success;
 
     } catch (error) {
       console.error('❌ FaultTolerantProcessor: Pipeline-only processing failed:', error.message);
@@ -217,7 +217,7 @@ class FaultTolerantProcessor {
       },
       dependencies: {
         tagService: this.tagService.getHealthStatus(),
-        opportunityService: this.opportunityService.getHealthStatus()
+        // opportunityService: this.opportunityService.getHealthStatus()
       },
       capabilities: {
         tagProcessing: true,
@@ -235,7 +235,7 @@ class FaultTolerantProcessor {
    */
   async getPipelineInfo() {
     try {
-      return await this.opportunityService.getDetailedPipelineInfo();
+      // return await this.opportunityService.getDetailedPipelineInfo();
     } catch (error) {
       return {
         success: false,
@@ -248,7 +248,7 @@ class FaultTolerantProcessor {
    * Clear all caches
    */
   clearCaches() {
-    this.opportunityService.clearCache();
+    // this.opportunityService.clearCache();
     console.log('🗑️ FaultTolerantProcessor: All caches cleared');
   }
 
