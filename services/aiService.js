@@ -1,966 +1,259 @@
 const OpenAI = require("openai");
 const axios = require("axios");
-require("dotenv").config();
 
-class EnhancedAIService {
+class SimplifiedAIService {
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
-
     if (!apiKey) {
-      throw new Error("OpenAI API key missing. Add OPENAI_API_KEY to .env file.");
+      throw new Error("OpenAI API key missing");
     }
-
-    console.log("✅ Enhanced AI Service initialized (Spanish Only - ReparaloYA with Memory & Embeddings)");
 
     this.openai = new OpenAI({
       apiKey,
-      timeout: 45000,
+      timeout: 30000,
       maxRetries: 2,
     });
+    
+    console.log("✅ Simplified AI Service initialized - Spanish Only");
   }
 
-  // =================================================
-  // ✅ MAIN MESSAGE PROCESSOR
-  // =================================================
   async processMessage(messageContent, messageType, mediaUrl, pricingData, contactInfo) {
     try {
       let processedContent = messageContent;
 
-      // Store user message in memory
-      const ConversationMemoryService = require('./conversationMemoryService');
-      await ConversationMemoryService.storeMessage(
-        contactInfo.contact_id,
-        'user',
-        messageContent,
-        {
-          message_type: messageType,
-          media_url: mediaUrl,
-          contact_name: contactInfo.full_name,
-          channel: contactInfo.channel || 'SMS'
-        }
-      );
-
-      // ✅ Voice → Transcription
+      // Handle media
       if (messageType === "voice" || messageType === "audio") {
-        console.log("🎤 Transcribing voice...");
         processedContent = await this.transcribeAudio(mediaUrl);
-      }
-
-      // ✅ Image → Vision Analysis
-      else if (messageType === "image" || messageType === "photo") {
-        console.log("🖼️ Analyzing image...");
+      } else if (messageType === "image" || messageType === "photo") {
         processedContent = await this.analyzeImage(mediaUrl);
       }
 
-      // Get conversation context for AI
-      const conversationContext = ConversationMemoryService.getConversationContext(
-        contactInfo.contact_id,
-        6
-      );
+      // Store in memory if service exists
+      try {
+        const ConversationMemoryService = require('./conversationMemoryService');
+        await ConversationMemoryService.storeMessage(
+          contactInfo.contact_id,
+          'user',
+          processedContent,
+          { message_type: messageType, media_url: mediaUrl }
+        );
+      } catch (err) {
+        console.log('Memory service not available, continuing...');
+      }
 
-      // ✅ AI → Enhanced response with conversation memory
-      console.log("🤖 Generating response with conversation memory...");
-      const aiResult = await this.generateEnhancedResponse(
-        processedContent,
-        messageType,
-        pricingData,
-        contactInfo,
-        conversationContext
-      );
+      // Generate AI response
+      const aiResult = await this.generateResponse(processedContent, contactInfo);
 
-      // Store AI response in memory
-      await ConversationMemoryService.storeMessage(
-        contactInfo.contact_id,
-        'assistant',
-        aiResult.customer_response,
-        {
-          message_type: 'text',
-          classification: aiResult.classification,
-          pricing_items_found: aiResult.pricing_items_found || 0
-        }
-      );
+      // Store AI response in memory if service exists
+      try {
+        const ConversationMemoryService = require('./conversationMemoryService');
+        await ConversationMemoryService.storeMessage(
+          contactInfo.contact_id,
+          'assistant',
+          aiResult.customer_response,
+          { classification: aiResult.classification }
+        );
+      } catch (err) {
+        console.log('Memory service not available for AI response, continuing...');
+      }
 
       return aiResult;
 
-    } catch (err) {
-      console.error("❌ Enhanced AI processing error:", err);
-      const fallbackResponse = await this.createEnhancedFallback(messageContent, contactInfo);
-      return fallbackResponse;
+    } catch (error) {
+      console.error("❌ AI processing error:", error.message);
+      return this.createFallbackResponse(processedContent, contactInfo);
     }
   }
 
-  // =================================================
-  // ✅ ENHANCED RESPONSE GENERATOR WITH NO QUESTIONS
-  // =================================================
-  async generateEnhancedResponse(processedContent, messageType, pricingData, contactInfo, conversationContext) {
+  async generateResponse(processedContent, contactInfo) {
     try {
-      // 🚀 USE EMBEDDINGS TO FIND RELEVANT PRODUCTS
-      const EnhancedPricingService = require('./pricingService');
-      const relevantProducts = await EnhancedPricingService.findRelevantProducts(processedContent, 60);
+      // Search for products
+      const SimplifiedPricingService = require('./pricingService');
+      const products = await SimplifiedPricingService.searchProducts(processedContent, 20);
       
-      console.log(`📊 Found ${relevantProducts.length} relevant products using embeddings`);
+      console.log(`📊 Found ${products.length} products for: "${processedContent}"`);
 
-      // 🎯 EXTRACT DEVICE AND SERVICE FOR ALL QUALITY OPTIONS
-      const deviceServiceInfo = this._extractDeviceAndService(processedContent, conversationContext);
-      let allQualityOptions = [];
+      // Create products text for AI
+      const productsText = this._createProductsText(products);
       
-      if (deviceServiceInfo.device && deviceServiceInfo.service) {
-        console.log(`🔍 Finding ALL quality options for ${deviceServiceInfo.device} ${deviceServiceInfo.service}`);
-        allQualityOptions = await EnhancedPricingService.findAllQualityOptions(
-          deviceServiceInfo.device,
-          deviceServiceInfo.service
-        );
+      // Get conversation context if available
+      let conversationContext = '';
+      try {
+        const ConversationMemoryService = require('./conversationMemoryService');
+        const context = ConversationMemoryService.getConversationContext(contactInfo.contact_id, 4);
+        console.log('context',context);
+        if (context.length > 0) {
+          conversationContext = 'Mensajes anteriores:\n' + 
+            context.map(msg => `${msg.role}: ${msg.content.substring(0, 100)}`).join('\n');
+            console.log('conversation context',conversationContext);
+
+        }
+      } catch (err) {
+        // No conversation memory available
       }
 
-      // Create enhanced pricing text with ALL quality options
-      const pricingText = this._createEnhancedPricingText(relevantProducts, allQualityOptions);
+      const systemPrompt = `Eres el asistente virtual de ReparaloYA, especialista en reparación de celulares en Montevideo, Uruguay.
 
-      // Check if this is a returning customer
-      const ConversationMemoryService = require('./conversationMemoryService');
-      const isReturning = !ConversationMemoryService.isNewConversation(contactInfo.contact_id);
-      const conversationSummary = isReturning ? ConversationMemoryService.getConversationSummary(contactInfo.contact_id) : null;
+REGLAS CRÍTICAS:
+1. 🇪🇸 RESPONDE SIEMPRE EN ESPAÑOL - NUNCA EN INGLÉS
+2. 🚀 MUESTRA TODAS las opciones disponibles INMEDIATAMENTE
+3. ❌ NUNCA preguntes "¿qué calidad prefieres?" ANTES de mostrar precios
+4. 💰 USA SOLO los precios de la base de datos - NUNCA inventes
+5. 📱 Si NO hay productos exactos, explica que los precios son aproximados y el equipo confirmará
 
-      const systemPrompt = `Eres el asistente virtual de ReparaloYA, especialistas en reparación de celulares en Montevideo, Uruguay.
-
-MEMORIA DE CONVERSACIÓN:
-${isReturning ? `Este cliente YA TE HA CONTACTADO ANTES. Resumen: ${JSON.stringify(conversationSummary, null, 2)}` : 'Este es un cliente NUEVO.'}
-
-CONTEXTO CONVERSACIONAL:
-${conversationContext.length > 0 ? 
-  'Mensajes anteriores:\n' + conversationContext.map((msg, i) => `${i+1}. ${msg.role}: ${msg.content.substring(0, 150)}...`).join('\n') 
-  : 'Sin mensajes anteriores'}
-
-REGLAS CRÍTICAS - LEE BIEN:
-1. 🚀 SIEMPRE muestra TODAS las opciones disponibles INMEDIATAMENTE - NUNCA hagas preguntas primero
-2. ❌ PROHIBIDO preguntar "¿qué calidad prefieres?" - MUESTRA todas las calidades con precios PRIMERO
-3. 💰 NUNCA inventes precios - solo usa precios de la base de datos
-4. ❌ NUNCA muestres precios de 0 UYU - si un precio es 0, di "precio a consultar"
-5. 📱 Sé específico con modelos - iPhone 13 vs iPhone 13 Pro son diferentes
-6. 🔄 Mantén continuidad conversacional - usa "como te mencioné antes" si es apropiado
-7. 💬 Haz preguntas de seguimiento DESPUÉS de mostrar opciones
-8. ✅ Responde ÚNICAMENTE en español
-9. 🛠️ Siempre promociona las ventajas del servicio (garantía, retiro a domicilio)
-10. 💎 EJEMPLO CORRECTO: "iPhone 11 pantalla rota" → "Para tu iPhone 11 pantalla tenemos: Original: 5680 UYU, Compatible: 3200 UYU, Incell: 2595 UYU"
-11. ❌ EJEMPLO INCORRECTO: "¿Qué calidad de pantalla prefieres?" (NUNCA hagas esto primero)
-
-BASE DE DATOS DE PRECIOS MEJORADA (${relevantProducts.length} productos relevantes):
-${pricingText}
+PRODUCTOS ENCONTRADOS (Búsqueda semántica):
+${productsText}
 
 INFORMACIÓN DEL NEGOCIO:
-SUCURSALES:
-- La Comercial: Carlos Reyles 1750, esq. José L. Terra, Lunes a Viernes 10:00-12:30 y 13:00-18:00, Sábados 09:00-13:00
-- Pocitos: Chucarro 1107, esq. Masini, Lunes a Viernes 10:00-18:00, Sábados 09:00-13:00  
-- Tres Cruces: Mario Cassinoni 1684, Lunes a Viernes 10:00-18:00, Sábados 09:00-13:00
+📞 WhatsApp: 098565349 | Teléfono: 2200-21-91
 
-SERVICIOS:
-- Reparación de smartphones, tablets, Apple Watch
-- Retiro y entrega a domicilio en Montevideo (costo varía según zona)
-- Garantía: 30 días en todas las reparaciones
-- WhatsApp: 098565349
-- Teléfono: 2200-21-91
+🏪 SUCURSALES:
+• La Comercial: Carlos Reyles 1750, esq. José L. Terra
+• Pocitos: Chucarro 1107, esq. Masini  
+• Tres Cruces: Mario Cassinoni 1684
 
-RESPONDE COMO HUMANO ÚTIL - MUESTRA OPCIONES INMEDIATAMENTE.`;
+✨ Garantía: 30 días | 🚚 Retiro a domicilio disponible
 
-      const userPrompt = `Mensaje del cliente: "${processedContent}"
-Tipo de mensaje: ${messageType}
-Cliente: ${contactInfo.full_name || "Cliente"}
-${isReturning ? 'CLIENTE QUE REGRESA - considera el contexto anterior' : 'CLIENTE NUEVO'}
+INSTRUCCIONES ESPECIALES:
+- Si hay productos con alta relevancia (>80%), son coincidencias exactas
+- Si hay productos con relevancia menor, son aproximaciones - menciona que el equipo confirmará precios
+- Si NO hay productos, di "No tenemos ese modelo específico, pero nuestro equipo te contactará con opciones similares"
 
-INSTRUCCIONES ESPECÍFICAS:
-1. Si hay múltiples calidades para el mismo producto, muestra TODAS las opciones con precios INMEDIATAMENTE
-2. Si el cliente pide "todos los precios" o "todas las opciones", incluye TODOS los productos relevantes
-3. Si un precio es 0 o inválido, di "precio a consultar en tienda"
-4. Mantén continuidad con conversaciones anteriores si es cliente que regresa
-5. CRÍTICO: NO hagas preguntas sobre preferencias ANTES de mostrar opciones
-6. Promociona las ventajas del servicio
-7. Responde naturalmente`;
+EJEMPLO CORRECTO:
+Cliente: "iPhone 11 pantalla"
+Respuesta: "Para iPhone 11 pantalla tenemos:
+• Original: 5680 UYU
+• Compatible: 3200 UYU
+¿Cuál te interesa más?"
+
+EJEMPLO CON APROXIMACIÓN:
+Cliente: "iPhone 15 pantalla"
+Respuesta: "No tenemos iPhone 15 específico en nuestra base actual, pero tenemos modelos similares:
+• iPhone 14 Pantalla Original: 5680 UYU
+• iPhone 14 Pro Pantalla: 6200 UYU
+Nuestro equipo te contactará para confirmar disponibilidad y precio exacto del iPhone 15."
+
+RESPONDE EN ESPAÑOL COMO HUMANO ÚTIL.`;
+
+      const userPrompt = `Cliente: ${contactInfo.full_name || "Cliente"}
+Mensaje: "${processedContent}"
+
+${conversationContext}
+
+INSTRUCCIONES:
+1. Si hay productos disponibles: MUESTRA TODAS las opciones con precios INMEDIATAMENTE
+2. Si NO hay productos exactos: "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles."
+3. NUNCA inventes precios
+4. Responde SOLO en español`;
 
       const result = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo-16k",
+        model: "gpt-3.5-turbo",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        temperature: 0.2, // Lower for more consistent responses
-        max_tokens: 1500 // Increased for comprehensive responses
+        temperature: 0.1,
+        max_tokens: 800
       });
 
-      let content = result.choices[0].message.content.trim();
-
-      // 🚀 LENIENT PARSING - Accept good responses even if not JSON
-      let classification;
-      try {
-        // Try to parse as JSON first
-        const parsed = JSON.parse(content);
-        if (parsed.customer_response && parsed.classification) {
-          content = parsed.customer_response;
-          classification = parsed.classification;
-        }
-      } catch (parseErr) {
-        // If not JSON, that's OK! Use the content as-is and extract classification
-        console.log('📝 AI responded naturally (not JSON) - extracting classification');
-        classification = this._extractClassificationFromContent(content, processedContent, conversationContext);
-      }
-
-      // Ensure classification exists
-      if (!classification) {
-        classification = this._extractClassificationFromContent(content, processedContent, conversationContext);
-      }
+      const response = result.choices[0].message.content.trim();
+      
+      // Extract classification
+      const classification = this._extractClassification(processedContent, response);
 
       return {
-        customer_response: content,
-        classification: {
-          device_brand: classification.device_brand || "unknown",
-          device_model: classification.device_model || "unknown", 
-          service_type: classification.service_type || "consulta general",
-          urgency: classification.urgency || "medium",
-          language: "es",
-          confidence: classification.confidence || "medium",
-          conversation_context: isReturning ? 'returning' : 'new'
-        },
+        customer_response: response,
+        classification: classification,
         processed_content: processedContent,
-        original_message_type: messageType,
-        pricing_items_found: relevantProducts.length,
-        quality_groups_found: allQualityOptions.length,
-        is_returning_customer: isReturning,
-        conversation_messages: conversationContext.length,
-        parsing_method: classification.parsing_method || 'extracted'
+        pricing_items_found: products.length,
+        parsing_method: 'simplified'
       };
 
-    } catch (err) {
-      console.error("❌ Enhanced response generation error:", err.message);
-      return this.createEnhancedFallback(processedContent, contactInfo);
+    } catch (error) {
+      console.error("❌ Response generation error:", error.message);
+      return this.createFallbackResponse(processedContent, contactInfo);
     }
   }
 
-  /**
-   * Extract classification from natural response content
-   */
-  _extractClassificationFromContent(content, originalContent, conversationContext) {
-    const contentLower = content.toLowerCase();
-    const originalLower = originalContent.toLowerCase();
-    const fullText = `${contentLower} ${originalLower}`;
-
-    // Extract device brand
-    let device_brand = "unknown";
-    if (fullText.includes('iphone') || fullText.includes('apple')) device_brand = "Apple";
-    else if (fullText.includes('samsung') || fullText.includes('galaxy')) device_brand = "Samsung";
-    else if (fullText.includes('xiaomi') || fullText.includes('redmi')) device_brand = "Xiaomi";
-    else if (fullText.includes('huawei')) device_brand = "Huawei";
-    else if (fullText.includes('motorola')) device_brand = "Motorola";
-
-    // Extract service type
-    let service_type = "consulta general";
-    if (fullText.includes('pantalla') || fullText.includes('screen') || fullText.includes('display') || fullText.includes('broken') || fullText.includes('cracked')) service_type = "pantalla";
-    else if (fullText.includes('bateria') || fullText.includes('battery')) service_type = "bateria";
-    else if (fullText.includes('camara') || fullText.includes('camera')) service_type = "camara";
-    else if (fullText.includes('carga') || fullText.includes('charging')) service_type = "carga";
-
-    // Extract device model
-    let device_model = "unknown";
-    const modelMatch = fullText.match(/iphone\s*(\d+(?:\s*pro(?:\s*max)?)?)/i);
-    if (modelMatch) {
-      device_model = `iPhone ${modelMatch[1]}`;
+  _createProductsText(products) {
+    if (products.length === 0) {
+      return 'No se encontraron productos específicos en la base de datos.';
     }
 
-    // Extract urgency
-    let urgency = "medium";
-    if (fullText.includes('urgente') || fullText.includes('rapido')) urgency = "high";
-    else if (fullText.includes('tranquilo') || fullText.includes('no urgente')) urgency = "low";
-
-    return {
-      device_brand,
-      device_model,
-      service_type,
-      urgency,
-      confidence: "medium",
-      parsing_method: "extracted_from_natural_response"
-    };
-  }
-
-  /**
-   * Enhanced pricing text creator
-   */
-  _createEnhancedPricingText(relevantProducts, allQualityOptions) {
-    let pricingText = '';
-
-    // Add quality options grouped by device/service first (these are most relevant)
-    if (allQualityOptions.length > 0) {
-      pricingText += '=== OPCIONES DISPONIBLES ===\n';
-      
-      for (const qualityGroup of allQualityOptions) {
-        pricingText += `\n${qualityGroup.device.toUpperCase()} - ${qualityGroup.service.toUpperCase()}:\n`;
-        
-        for (const option of qualityGroup.options) {
-          const price = this._extractValidPrice(option);
-          const priceText = price > 0 ? `${price} UYU` : 'Precio a consultar';
-          const quality = option.quality || 'Estándar';
-          
-          pricingText += `  • ${quality}: ${priceText}\n`;
-        }
-      }
-      
-      pricingText += '\n=== PRODUCTOS RELACIONADOS ===\n';
-    }
-
-    // Add relevant products from embeddings search
-    const displayedProducts = new Set();
+    let text = `Se encontraron ${products.length} productos:\n`;
     
-    for (const item of relevantProducts.slice(0, 50)) { // Limit to top 50 for performance
-      const productKey = item._productKey || this._generateProductKey(item);
+    // Check if any products are approximate matches
+    const hasApproximateMatches = products.some(p => p._isApproximate);
+    
+    for (const product of products.slice(0, 15)) { // Limit to top 15
+      const productName = product.Prod || product.product || Object.values(product)[0] || 'Producto desconocido';
+      const price = this._getPrice(product);
+      const priceText = price > 0 ? `${price} UYU` : 'Consultar precio';
       
-      if (!displayedProducts.has(productKey)) {
-        const productName = item.Prod || item.product || Object.values(item)[0] || 'Unknown';
-        const price = this._extractValidPrice(item);
-        const priceText = price > 0 ? `${price} UYU` : 'Precio a consultar';
-        
-        pricingText += `${productName}: ${priceText}\n`;
-        displayedProducts.add(productKey);
+      // Add similarity score for semantic matches
+      let matchInfo = '';
+      if (product._similarity) {
+        const similarity = (product._similarity * 100).toFixed(0);
+        matchInfo = ` (${similarity}% relevancia)`;
+      } else if (product._score) {
+        matchInfo = ` (coincidencia ${product._score})`;
       }
+      
+      text += `• ${productName}: ${priceText}${matchInfo}\n`;
     }
-
-    return pricingText;
+    
+    // Add note about approximate matches if any
+    if (hasApproximateMatches) {
+      const exactModel = products[0]._exactModelRequested;
+      text += `\nNOTA: No se encontró el modelo exacto "${exactModel}". Los precios mostrados son de modelos similares. Nuestro equipo se contactará contigo para confirmar el precio exacto del modelo solicitado.`;
+    }
+    
+    return text;
   }
 
-  /**
-   * Extract device and service from content
-   */
-  _extractDeviceAndService(content, conversationContext) {
-    const fullText = content + ' ' + conversationContext.map(m => m.content).join(' ');
-    const textLower = fullText.toLowerCase();
-
-    let device = 'unknown';
-    let service = 'unknown';
-
-    // iPhone detection with better patterns
-    const iphoneMatch = textLower.match(/iphone\s*(\d+(?:\s*pro(?:\s*max)?)?|se|xr|xs(?:\s*max)?|x)/i);
-    if (iphoneMatch) {
-      device = `iphone ${iphoneMatch[1].replace(/\s+/g, ' ').trim()}`;
-    }
-
-    // Samsung detection
-    const samsungMatch = textLower.match(/samsung|galaxy/);
-    if (samsungMatch) {
-      const modelMatch = textLower.match(/galaxy\s*([a-z]\d+|note\s*\d+|s\d+)/i);
-      if (modelMatch) {
-        device = `samsung galaxy ${modelMatch[1]}`;
-      } else {
-        device = 'samsung';
-      }
-    }
-
-    // Service detection with more keywords
-    const serviceKeywords = {
-      'pantalla': ['pantalla', 'display', 'screen', 'tactil', 'táctil', 'touch', 'lcd', 'oled', 'broken', 'cracked', 'roto', 'rota'],
-      'bateria': ['bateria', 'batería', 'battery'],
-      'camara': ['camara', 'cámara', 'camera', 'lente'],
-      'carga': ['carga', 'charging', 'conector', 'puerto', 'usb'],
-      'altavoz': ['altavoz', 'speaker', 'audio', 'sonido']
-    };
-
-    for (const [serviceType, keywords] of Object.entries(serviceKeywords)) {
-      for (const keyword of keywords) {
-        if (textLower.includes(keyword)) {
-          service = serviceType;
-          break;
-        }
-      }
-      if (service !== 'unknown') break;
-    }
-
-    console.log(`🎯 Extracted: Device="${device}", Service="${service}"`);
-    return { device, service };
-  }
-
-  /**
-   * Helper methods
-   */
-  _extractValidPrice(item) {
-    const priceFields = ['PUBLICO TIENDA', 'price', 'precio', 'cost', 'costo'];
+  _getPrice(item) {
+    const priceFields = ['PUBLICO TIENDA', 'price', 'precio'];
     
     for (const field of priceFields) {
       if (item[field]) {
-        const priceStr = item[field].toString();
-        const price = parseFloat(priceStr.replace(/[^0-9.]/g, ''));
-        
+        const price = parseFloat(item[field].toString().replace(/[^0-9.]/g, ''));
         if (!isNaN(price) && price > 0) {
           return price;
         }
       }
     }
-    
     return 0;
   }
 
-  _generateProductKey(item) {
-    const productName = item.Prod || item.product || Object.values(item)[0] || 'unknown';
-    return productName.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '_');
-  }
-
-  // =================================================
-  // ✅ FALLBACK RESPONSE
-  // =================================================
-  async createEnhancedFallback(processedContent, contactInfo) {
-    const ConversationMemoryService = require('./conversationMemoryService');
-    const isReturning = !ConversationMemoryService.isNewConversation(contactInfo.contact_id);
+  _extractClassification(originalContent, response) {
+    const text = (originalContent + ' ' + response).toLowerCase();
     
-    const greeting = isReturning ? 
-      `¡Hola de nuevo ${contactInfo.full_name || ''}!` : 
-      `¡Hola ${contactInfo.full_name || ''}!`;
-
-    const fallbackResponse = `${greeting} ¡Gracias por contactar ReparaloYA! 🔧📱
-
-${isReturning ? 'Veo que ya habíamos conversado antes. ' : ''}Nuestro equipo te responderá pronto durante nuestro horario comercial.
-
-Para reparaciones urgentes:
-📞 Teléfono: 2200-21-91  
-📱 WhatsApp: 098565349
-
-🏪 NUESTRAS SUCURSALES:
-• La Comercial: Carlos Reyles 1750, esq. José L. Terra
-• Pocitos: Chucarro 1107, esq. Masini  
-• Tres Cruces: Mario Cassinoni 1684
-
-✨ Garantía de 30 días en todas las reparaciones
-🚚 Retiro y entrega a domicilio disponible
-
-¡Estamos aquí para ayudarte!`;
-
-    return {
-      customer_response: fallbackResponse,
-      classification: {
-        device_brand: "unknown",
-        device_model: "unknown",
-        service_type: "consulta general",
-        urgency: "medium",
-        language: "es",
-        confidence: "low",
-        conversation_context: isReturning ? 'returning' : 'new'
-      },
-      processed_content: processedContent,
-      original_message_type: "text",
-      fallback: true,
-      is_returning_customer: isReturning,
-      parsing_method: 'fallback'
-    };
-  }
-
-  // =================================================
-  // ✅ AUDIO TRANSCRIPTION
-  // =================================================
-  async transcribeAudio(mediaUrl) {
-    try {
-      if (!mediaUrl) throw new Error("Missing audio URL");
-
-      const audioResponse = await axios.get(mediaUrl, {
-        responseType: "arraybuffer",
-        timeout: 30000,
-        headers: { 'User-Agent': 'ReparaloyaBot/3.0' }
-      });
-
-      const audioBuffer = Buffer.from(audioResponse.data);
-      const file = new File([audioBuffer], "audio.mp3", { type: "audio/mpeg" });
-
-      const transcription = await this.openai.audio.transcriptions.create({
-        file: file,
-        model: "whisper-1",
-        language: "es",
-        response_format: "text",
-        prompt: "Reparación de celulares, iPhone, Samsung, pantalla, batería, cámara"
-      });
-
-      console.log("✅ Transcription:", transcription);
-      return transcription;
-    } catch (err) {
-      console.error("❌ Transcription error:", err.message);
-      return `[Error de transcripción de audio]`;
-    }
-  }
-
-  // =================================================
-  // ✅ IMAGE ANALYSIS
-  // =================================================
-  async analyzeImage(imageUrl) {
-    try {
-      if (!imageUrl) throw new Error("Missing image URL");
-
-      const result = await this.openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Analiza esta imagen e identifica: 1) El modelo exacto del dispositivo, 2) Los daños visibles específicos, 3) El tipo de reparación probable. Responde en español, máximo 200 palabras."
-              },
-              {
-                type: "image_url",
-                image_url: { url: imageUrl }
-              }
-            ]
-          }
-        ],
-        max_tokens: 350,
-        temperature: 0.3
-      });
-
-      const text = result.choices[0].message.content;
-      console.log("✅ Image analysis:", text);
-      return text;
-
-    } catch (err) {
-      console.error("❌ Image analysis error:", err.message);
-      return `[Error de análisis de imagen: describe tu problema por texto]`;
-    }
-  }
-}
-
-module.exports = new EnhancedAIService();
-
-class FlexibleAIService {
-  constructor() {
-    const apiKey = process.env.OPENAI_API_KEY;
-
-    if (!apiKey) {
-      throw new Error("OpenAI API key missing. Add OPENAI_API_KEY to .env file.");
-    }
-
-    console.log("✅ Flexible AI Service initialized (Direct Responses + No Annoying Questions)");
-
-    this.openai = new OpenAI({
-      apiKey,
-      timeout: 45000,
-      maxRetries: 2,
-    });
-  }
-
-  // =================================================
-  // ✅ MAIN MESSAGE PROCESSOR WITH FLEXIBLE PARSING
-  // =================================================
-  async processMessage(messageContent, messageType, mediaUrl, pricingData, contactInfo) {
-    try {
-      let processedContent = messageContent;
-
-      // Store user message in memory
-      const ConversationMemoryService = require('./conversationMemoryService');
-      await ConversationMemoryService.storeMessage(
-        contactInfo.contact_id,
-        'user',
-        messageContent,
-        {
-          message_type: messageType,
-          media_url: mediaUrl,
-          contact_name: contactInfo.full_name,
-          channel: contactInfo.channel || 'SMS'
-        }
-      );
-
-      // ✅ Voice → Transcription
-      if (messageType === "voice" || messageType === "audio") {
-        console.log("🎤 Transcribing voice...");
-        processedContent = await this.transcribeAudio(mediaUrl);
-      }
-
-      // ✅ Image → Vision Analysis
-      else if (messageType === "image" || messageType === "photo") {
-        console.log("🖼️ Analyzing image...");
-        processedContent = await this.analyzeImage(mediaUrl);
-      }
-
-      // Get conversation context for AI
-      const conversationContext = ConversationMemoryService.getConversationContext(
-        contactInfo.contact_id,
-        6
-      );
-
-      // ✅ AI → Flexible response with natural conversation
-      console.log("🤖 Generating direct response (no annoying questions)...");
-      const aiResult = await this.generateDirectResponse(
-        processedContent,
-        messageType,
-        pricingData,
-        contactInfo,
-        conversationContext
-      );
-
-      // Store AI response in memory
-      await ConversationMemoryService.storeMessage(
-        contactInfo.contact_id,
-        'assistant',
-        aiResult.customer_response,
-        {
-          message_type: 'text',
-          classification: aiResult.classification,
-          pricing_items_found: aiResult.pricing_items_found || 0
-        }
-      );
-
-      return aiResult;
-
-    } catch (err) {
-      console.error("❌ Flexible AI processing error:", err);
-      const fallbackResponse = await this.createDirectFallback(processedContent, contactInfo);
-      return fallbackResponse;
-    }
-  }
-
-  // =================================================
-  // ✅ DIRECT RESPONSE GENERATOR (NO QUESTIONS FIRST)
-  // =================================================
-  async generateDirectResponse(processedContent, messageType, pricingData, contactInfo, conversationContext) {
-    try {
-      const EnhancedPricingService = require('./pricingService');
-      
-      // 🚀 GET MORE RELEVANT PRODUCTS (60 products)
-      const relevantProducts = await EnhancedPricingService.findRelevantProducts(processedContent, 60);
-      
-      console.log(`📊 Found ${relevantProducts.length} relevant products using embeddings`);
-
-      // 🎯 EXTRACT DEVICE AND SERVICE FOR ALL QUALITY OPTIONS
-      const deviceServiceInfo = this._extractDeviceAndService(processedContent, conversationContext);
-      let allQualityOptions = [];
-      
-      if (deviceServiceInfo.device && deviceServiceInfo.service) {
-        console.log(`🔍 Finding ALL quality options for ${deviceServiceInfo.device} ${deviceServiceInfo.service}`);
-        allQualityOptions = await EnhancedPricingService.findAllQualityOptions(
-          deviceServiceInfo.device,
-          deviceServiceInfo.service
-        );
-      }
-
-      // Create comprehensive pricing text with ALL options
-      const pricingText = this._createComprehensivePricingText(relevantProducts, allQualityOptions);
-
-      // Check if this is a returning customer
-      const ConversationMemoryService = require('./conversationMemoryService');
-      const isReturning = !ConversationMemoryService.isNewConversation(contactInfo.contact_id);
-
-      const systemPrompt = `Eres el asistente virtual de ReparaloYA, especialistas en reparación de celulares en Montevideo, Uruguay.
-
-INSTRUCCIONES CRÍTICAS - LEE CUIDADOSAMENTE:
-1. 🚀 SIEMPRE muestra TODAS las opciones disponibles INMEDIATAMENTE - NUNCA hagas preguntas primero
-2. 💰 NUNCA inventes precios - solo usa la base de datos
-3. 📋 Cuando alguien menciona un dispositivo y problema, LISTA TODAS las opciones con precios INMEDIATAMENTE
-4. ❌ PROHIBIDO preguntar "¿qué calidad prefieres?" - MUESTRA todas las calidades con precios PRIMERO
-5. ✅ Responde NATURALMENTE - NO uses formato JSON
-6. 🛠️ Promociona servicios: garantía 30 días, retiro a domicilio
-7. 💎 EJEMPLO CORRECTO: "iPhone 11 pantalla rota" → INMEDIATAMENTE: "Para iPhone 11 pantalla tenemos: Original: 5680 UYU, Compatible: 3200 UYU, Incell: 2595 UYU"
-8. ❌ EJEMPLO INCORRECTO: "¿Qué calidad prefieres?" (NUNCA hagas esto)
-
-INFORMACIÓN COMPLETA DE PRECIOS (${relevantProducts.length} productos):
-${pricingText}
-
-DATOS DEL NEGOCIO:
-SUCURSALES:
-- La Comercial: Carlos Reyles 1750, esq. José L. Terra, Lunes a Viernes 10:00-12:30 y 13:00-18:00, Sábados 09:00-13:00
-- Pocitos: Chucarro 1107, esq. Masini, Lunes a Viernes 10:00-18:00, Sábados 09:00-13:00  
-- Tres Cruces: Mario Cassinoni 1684, Lunes a Viernes 10:00-18:00, Sábados 09:00-13:00
-
-SERVICIOS:
-- Reparación de smartphones, tablets, Apple Watch  
-- Retiro y entrega a domicilio en Montevideo
-- Garantía: 30 días en todas las reparaciones
-- WhatsApp: 098565349 | Teléfono: 2200-21-91
-
-${isReturning ? `CLIENTE QUE REGRESA: Este cliente ya conversó contigo antes.` : 'CLIENTE NUEVO: Preséntate amigablemente.'}
-
-RESPONDE COMO HUMANO ÚTIL - MUESTRA OPCIONES INMEDIATAMENTE.`;
-
-      const userPrompt = `Cliente: ${contactInfo.full_name || "Cliente"}
-Mensaje: "${processedContent}"
-Tipo: ${messageType}
-
-CRÍTICO: NO hagas preguntas sobre qué quieren - MUESTRA TODAS las opciones inmediatamente.
-Si dicen "iPhone 11 pantalla rota" → INMEDIATAMENTE responde con TODAS las opciones con precios.
-NO preguntes qué calidad prefieren - MUESTRA todas y que ellos decidan.
-Solo haz preguntas DESPUÉS de mostrar todas las opciones disponibles.`;
-
-      const result = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo-16k",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        temperature: 0.2, // Lower temperature for more consistent responses
-        max_tokens: 1500
-      });
-
-      let content = result.choices[0].message.content.trim();
-
-      // 🚀 FLEXIBLE PARSING - Accept ANY good response
-      let classification;
-      
-      // Try JSON parsing first (in case AI still uses JSON)
-      try {
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.customer_response && parsed.classification) {
-            content = parsed.customer_response;
-            classification = parsed.classification;
-          }
-        }
-      } catch (jsonErr) {
-        // Not JSON - that's perfectly fine!
-      }
-
-      // Extract classification from the response content
-      if (!classification) {
-        classification = this._extractClassificationFromResponse(content, processedContent, conversationContext);
-      }
-
-      console.log('✅ Direct response generated:', {
-        response_length: content.length,
-        has_classification: !!classification,
-        parsing_method: classification?.parsing_method || 'natural'
-      });
-
-      return {
-        customer_response: content,
-        classification: {
-          device_brand: classification?.device_brand || "unknown",
-          device_model: classification?.device_model || "unknown", 
-          service_type: classification?.service_type || "consulta general",
-          urgency: classification?.urgency || "medium",
-          language: "es",
-          confidence: classification?.confidence || "medium",
-          conversation_context: isReturning ? 'returning' : 'new'
-        },
-        processed_content: processedContent,
-        original_message_type: messageType,
-        pricing_items_found: relevantProducts.length,
-        quality_groups_found: allQualityOptions.length,
-        is_returning_customer: isReturning,
-        conversation_messages: conversationContext.length,
-        parsing_method: 'direct_response'
-      };
-
-    } catch (err) {
-      console.error("❌ Direct response generation error:", err.message);
-      return this.createDirectFallback(processedContent, contactInfo);
-    }
-  }
-
-  // =================================================
-  // ✅ COMPREHENSIVE PRICING TEXT (ALL OPTIONS)
-  // =================================================
-  _createComprehensivePricingText(relevantProducts, allQualityOptions) {
-    let pricingText = '';
-
-    // Add quality options grouped by device/service
-    if (allQualityOptions.length > 0) {
-      pricingText += '=== TODAS LAS CALIDADES DISPONIBLES ===\n';
-      
-      for (const qualityGroup of allQualityOptions) {
-        pricingText += `\n${qualityGroup.device.toUpperCase()} - ${qualityGroup.service.toUpperCase()}:\n`;
-        
-        for (const option of qualityGroup.options) {
-          const price = this._extractValidPrice(option);
-          const priceText = price > 0 ? `${price} UYU` : 'Precio a consultar';
-          const quality = option.quality || 'Estándar';
-          
-          pricingText += `  • ${quality}: ${priceText}\n`;
-        }
-      }
-      
-      pricingText += '\n=== PRODUCTOS RELACIONADOS ===\n';
-    }
-
-    // Add ALL relevant products (not limited)
-    const displayedProducts = new Set();
-    
-    for (const item of relevantProducts) {
-      const productKey = item._productKey || this._generateProductKey(item);
-      
-      if (!displayedProducts.has(productKey)) {
-        const productName = item.Prod || item.product || Object.values(item)[0] || 'Unknown';
-        const price = this._extractValidPrice(item);
-        const priceText = price > 0 ? `${price} UYU` : 'Precio a consultar';
-        
-        pricingText += `${productName}: ${priceText}\n`;
-        displayedProducts.add(productKey);
-      }
-    }
-
-    return pricingText;
-  }
-
-  // =================================================
-  // ✅ SMART CLASSIFICATION EXTRACTION
-  // =================================================
-  _extractClassificationFromResponse(content, originalContent, conversationContext) {
-    const contentLower = content.toLowerCase();
-    const originalLower = originalContent.toLowerCase();
-    const fullText = `${contentLower} ${originalLower}`;
-
-    // Extract device brand
     let device_brand = "unknown";
-    if (fullText.includes('iphone') || fullText.includes('apple')) device_brand = "Apple";
-    else if (fullText.includes('samsung') || fullText.includes('galaxy')) device_brand = "Samsung";
-    else if (fullText.includes('xiaomi') || fullText.includes('redmi')) device_brand = "Xiaomi";
-    else if (fullText.includes('huawei')) device_brand = "Huawei";
-    else if (fullText.includes('motorola')) device_brand = "Motorola";
-    else if (fullText.includes('nokia')) device_brand = "Nokia";
-    else if (fullText.includes('lg')) device_brand = "LG";
+    if (text.includes('iphone') || text.includes('apple')) device_brand = "Apple";
+    else if (text.includes('samsung') || text.includes('galaxy')) device_brand = "Samsung";
+    else if (text.includes('xiaomi')) device_brand = "Xiaomi";
+    else if (text.includes('huawei')) device_brand = "Huawei";
+    else if (text.includes('motorola')) device_brand = "Motorola";
 
-    // Extract service type
     let service_type = "consulta general";
-    if (fullText.includes('pantalla') || fullText.includes('screen') || fullText.includes('display')) service_type = "pantalla";
-    else if (fullText.includes('bateria') || fullText.includes('battery') || fullText.includes('batería')) service_type = "bateria";
-    else if (fullText.includes('camara') || fullText.includes('camera') || fullText.includes('cámara')) service_type = "camara";
-    else if (fullText.includes('carga') || fullText.includes('charging') || fullText.includes('conector')) service_type = "carga";
-    else if (fullText.includes('altavoz') || fullText.includes('speaker') || fullText.includes('audio')) service_type = "altavoz";
-    else if (fullText.includes('agua') || fullText.includes('water') || fullText.includes('mojado')) service_type = "agua";
+    if (text.includes('pantalla') || text.includes('screen')) service_type = "pantalla";
+    else if (text.includes('bateria') || text.includes('battery')) service_type = "bateria";
+    else if (text.includes('camara') || text.includes('camera')) service_type = "camara";
+    else if (text.includes('carga')) service_type = "carga";
 
-    // Extract device model with more patterns
-    let device_model = "unknown";
-    const iphoneMatch = fullText.match(/iphone\s*(\d+(?:\s*pro(?:\s*max)?)?|se|xr|xs(?:\s*max)?|x)/i);
-    if (iphoneMatch) {
-      device_model = `iPhone ${iphoneMatch[1]}`;
-    }
-    
-    const galaxyMatch = fullText.match(/galaxy\s*([a-z]\d+|note\s*\d+|s\d+)/i);
-    if (galaxyMatch) {
-      device_model = `Galaxy ${galaxyMatch[1]}`;
-    }
+    const iphoneMatch = text.match(/iphone\s*(\d+)/i);
+    const device_model = iphoneMatch ? `iPhone ${iphoneMatch[1]}` : "unknown";
 
     return {
       device_brand,
       device_model,
       service_type,
       urgency: "medium",
-      confidence: "medium",
-      parsing_method: "extracted_from_natural"
+      language: "es",
+      confidence: "medium"
     };
   }
 
-  // =================================================
-  // ✅ DEVICE AND SERVICE EXTRACTION
-  // =================================================
-  _extractDeviceAndService(content, conversationContext) {
-    const fullText = content + ' ' + conversationContext.map(m => m.content).join(' ');
-    const textLower = fullText.toLowerCase();
-
-    let device = 'unknown';
-    let service = 'unknown';
-
-    // iPhone detection
-    const iphoneMatch = textLower.match(/iphone\s*(\d+(?:\s*pro(?:\s*max)?)?|se|xr|xs(?:\s*max)?|x)/i);
-    if (iphoneMatch) {
-      device = `iphone ${iphoneMatch[1].replace(/\s+/g, ' ').trim()}`;
-    }
-
-    // Samsung detection
-    const samsungMatch = textLower.match(/samsung|galaxy/);
-    if (samsungMatch) {
-      const modelMatch = textLower.match(/galaxy\s*([a-z]\d+|note\s*\d+|s\d+)/i);
-      if (modelMatch) {
-        device = `samsung galaxy ${modelMatch[1]}`;
-      } else {
-        device = 'samsung';
-      }
-    }
-
-    // Service detection
-    const serviceKeywords = {
-      'pantalla': ['pantalla', 'display', 'screen', 'tactil', 'táctil', 'touch', 'lcd', 'oled', 'broken', 'cracked', 'roto'],
-      'bateria': ['bateria', 'batería', 'battery'],
-      'camara': ['camara', 'cámara', 'camera', 'lente'],
-      'carga': ['carga', 'charging', 'conector', 'puerto', 'usb'],
-      'altavoz': ['altavoz', 'speaker', 'audio', 'sonido']
-    };
-
-    for (const [serviceType, keywords] of Object.entries(serviceKeywords)) {
-      for (const keyword of keywords) {
-        if (textLower.includes(keyword)) {
-          service = serviceType;
-          break;
-        }
-      }
-      if (service !== 'unknown') break;
-    }
-
-    console.log(`🎯 Extracted: Device="${device}", Service="${service}"`);
-    return { device, service };
-  }
-
-  // =================================================
-  // ✅ HELPER METHODS
-  // =================================================
-  _extractValidPrice(item) {
-    const priceFields = ['PUBLICO TIENDA', 'price', 'precio', 'cost', 'costo'];
-    
-    for (const field of priceFields) {
-      if (item[field]) {
-        const priceStr = item[field].toString();
-        const price = parseFloat(priceStr.replace(/[^0-9.]/g, ''));
-        
-        if (!isNaN(price) && price > 0) {
-          return price;
-        }
-      }
-    }
-    
-    return 0;
-  }
-
-  _generateProductKey(item) {
-    const productName = item.Prod || item.product || Object.values(item)[0] || 'unknown';
-    return productName.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '_');
-  }
-
-  // =================================================
-  // ✅ DIRECT FALLBACK (NO QUESTIONS)
-  // =================================================
-  async createDirectFallback(processedContent, contactInfo) {
-    const ConversationMemoryService = require('./conversationMemoryService');
-    const isReturning = !ConversationMemoryService.isNewConversation(contactInfo.contact_id);
-    
-    const greeting = isReturning ? 
-      `¡Hola de nuevo ${contactInfo.full_name || ''}!` : 
-      `¡Hola ${contactInfo.full_name || ''}!`;
-
-    const fallbackResponse = `${greeting} ¡Gracias por contactar ReparaloYA! 🔧📱
-
-${isReturning ? 'Veo que ya habíamos conversado antes. ' : ''}Nuestro equipo te responderá pronto con información específica sobre tu consulta.
-
-Para reparaciones urgentes:
-📞 Teléfono: 2200-21-91  
-📱 WhatsApp: 098565349
-
-🏪 NUESTRAS SUCURSALES:
-• La Comercial: Carlos Reyles 1750, esq. José L. Terra
-• Pocitos: Chucarro 1107, esq. Masini  
-• Tres Cruces: Mario Cassinoni 1684
-
-✨ Garantía de 30 días en todas las reparaciones
-🚚 Retiro y entrega a domicilio disponible
-
-¡Estamos aquí para ayudarte!`;
-
-    return {
-      customer_response: fallbackResponse,
-      classification: {
-        device_brand: "unknown",
-        device_model: "unknown",
-        service_type: "consulta general",
-        urgency: "medium",
-        language: "es",
-        confidence: "low",
-        conversation_context: isReturning ? 'returning' : 'new'
-      },
-      processed_content: processedContent,
-      original_message_type: "text",
-      fallback: true,
-      is_returning_customer: isReturning,
-      parsing_method: 'fallback'
-    };
-  }
-
-  // =================================================
-  // ✅ AUDIO TRANSCRIPTION
-  // =================================================
   async transcribeAudio(mediaUrl) {
     try {
       if (!mediaUrl) throw new Error("Missing audio URL");
@@ -968,7 +261,7 @@ Para reparaciones urgentes:
       const audioResponse = await axios.get(mediaUrl, {
         responseType: "arraybuffer",
         timeout: 30000,
-        headers: { 'User-Agent': 'ReparaloyaBot/3.0' }
+        headers: { 'User-Agent': 'ReparaloyaBot/1.0' }
       });
 
       const audioBuffer = Buffer.from(audioResponse.data);
@@ -978,21 +271,17 @@ Para reparaciones urgentes:
         file: file,
         model: "whisper-1",
         language: "es",
-        response_format: "text",
-        prompt: "Reparación de celulares, iPhone, Samsung, pantalla, batería, cámara"
+        response_format: "text"
       });
 
       console.log("✅ Transcription:", transcription);
       return transcription;
-    } catch (err) {
-      console.error("❌ Transcription error:", err.message);
-      return `[Error de transcripción de audio]`;
+    } catch (error) {
+      console.error("❌ Transcription error:", error.message);
+      return "[Error de transcripción de audio]";
     }
   }
 
-  // =================================================
-  // ✅ IMAGE ANALYSIS
-  // =================================================
   async analyzeImage(imageUrl) {
     try {
       if (!imageUrl) throw new Error("Missing image URL");
@@ -1005,7 +294,7 @@ Para reparaciones urgentes:
             content: [
               {
                 type: "text",
-                text: "Analiza esta imagen e identifica: 1) El modelo exacto del dispositivo, 2) Los daños visibles específicos, 3) El tipo de reparación probable. Responde en español, máximo 200 palabras."
+                text: "Analiza esta imagen e identifica: 1) El modelo del dispositivo, 2) Los daños visibles, 3) El tipo de reparación necesaria. Responde en español, máximo 150 palabras."
               },
               {
                 type: "image_url",
@@ -1014,7 +303,7 @@ Para reparaciones urgentes:
             ]
           }
         ],
-        max_tokens: 350,
+        max_tokens: 300,
         temperature: 0.3
       });
 
@@ -1022,11 +311,45 @@ Para reparaciones urgentes:
       console.log("✅ Image analysis:", text);
       return text;
 
-    } catch (err) {
-      console.error("❌ Image analysis error:", err.message);
-      return `[Error de análisis de imagen: describe tu problema por texto]`;
+    } catch (error) {
+      console.error("❌ Image analysis error:", error.message);
+      return "[Error de análisis de imagen: describe tu problema por texto]";
     }
+  }
+
+  createFallbackResponse(processedContent, contactInfo) {
+    const response = `¡Hola ${contactInfo.full_name || ''}! 
+
+Tu solicitud ha sido registrada. Nuestro equipo te contactará pronto con las opciones disponibles para tu consulta.
+
+🆘 Para urgencias:
+📞 Teléfono: 2200-21-91  
+📱 WhatsApp: 098565349
+
+🏪 SUCURSALES:
+• La Comercial: Carlos Reyles 1750
+• Pocitos: Chucarro 1107
+• Tres Cruces: Mario Cassinoni 1684
+
+✨ Garantía 30 días | 🚚 Retiro a domicilio
+
+¡Gracias por contactar ReparaloYA!`;
+
+    return {
+      customer_response: response,
+      classification: {
+        device_brand: "unknown",
+        device_model: "unknown",
+        service_type: "consulta general",
+        urgency: "medium",
+        language: "es",
+        confidence: "low"
+      },
+      processed_content: processedContent,
+      fallback: true,
+      parsing_method: 'fallback'
+    };
   }
 }
 
-module.exports = new FlexibleAIService();
+module.exports = new SimplifiedAIService();

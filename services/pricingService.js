@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
 
-class EnhancedPricingService {
+class FixedPricingService {
   constructor() {
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -10,542 +10,546 @@ class EnhancedPricingService {
       maxRetries: 2,
     });
     
+    // ChromaDB-style vector store
+    this.vectorStore = new Map(); // productId -> {embedding, metadata}
+    this.products = new Map(); // productId -> {name, price, metadata}
+    
     this.pricingData = null;
-    this.lastFetch = null;
-    this.cacheTimeout = 5 * 60 * 1000; // 5 minutes cache
-    this.csvFilePath = path.join(__dirname, '..', 'pricing.csv');
+    this.csvFilePath = path.join(process.cwd(), 'pricing.csv');
+    this.vectorCacheFile = path.join(process.cwd(), 'vector-cache.json');
+    this.isInitialized = false;
     
-    // Store embeddings cache
-    this.productEmbeddings = new Map();
-    this.embeddingsCacheFile = path.join(__dirname, '..', 'embeddings-cache.json');
-    
-    console.log('✅ Enhanced Pricing Service initialized with OpenAI embeddings');
+    console.log('✅ ChromaDB-style Pricing Service initialized');
   }
   
-  /**
-   * Get pricing data with enhanced search capabilities
-   */
   async getPricingData() {
+    await this.initialize();
+    return this.pricingData;
+  }
+  
+  async initialize() {
+    if (this.isInitialized) return;
+    
     try {
-      // Check cache first
-      if (this.pricingData && this.lastFetch && 
-          (Date.now() - this.lastFetch) < this.cacheTimeout) {
-        console.log('📊 Using cached pricing data');
-        return this.pricingData;
-      }
+      console.log('📊 Loading products and generating embeddings...');
       
-      console.log('📊 Reading pricing data from local CSV file...');
-      console.log('📁 CSV file path:', this.csvFilePath);
+      // Load CSV data first
+      await this._loadCSVData();
       
-      // Check if file exists
-      if (!fs.existsSync(this.csvFilePath)) {
-        throw new Error(`Pricing CSV file not found at: ${this.csvFilePath}. Please ensure pricing.csv is in the project root.`);
-      }
+      // Load or generate embeddings for semantic search
+      await this._loadOrGenerateVectorStore();
       
-      // Read the CSV file
-      const csvData = fs.readFileSync(this.csvFilePath, 'utf8');
-      
-      if (!csvData.trim()) {
-        throw new Error('CSV file is empty');
-      }
-      
-      // Parse CSV data
-      const lines = csvData.split('\n').filter(line => line.trim());
-      
-      if (lines.length < 2) {
-        throw new Error('Invalid CSV data - no pricing rows found');
-      }
-      
-      // Parse headers
-      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-      console.log('📋 CSV Headers:', headers);
-      
-      // Parse data rows with enhanced processing
-      const pricingItems = [];
-      for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-        
-        if (values.length >= 2 && values[0]) {
-          const item = {};
-          headers.forEach((header, index) => {
-            item[header] = values[index] || '';
-          });
-          
-          // Enhanced item processing
-          item._enhanced = this._enhanceProductItem(item, headers);
-          pricingItems.push(item);
-        }
-      }
-      
-      this.pricingData = {
-        items: pricingItems,
-        total_count: pricingItems.length,
-        last_updated: new Date().toISOString(),
-        headers: headers,
-        source: 'local-csv-enhanced'
-      };
-      
-      this.lastFetch = Date.now();
-      
-      console.log(`✅ Loaded ${pricingItems.length} pricing items from local CSV`);
-      
-      // Load or generate embeddings
-      await this._loadOrGenerateEmbeddings();
-      
-      return this.pricingData;
+      this.isInitialized = true;
+      console.log(`✅ Initialized with ${this.products.size} products`);
       
     } catch (error) {
-      console.error('❌ Error reading pricing CSV:', error.message);
-      
-      // Return cached data if available, even if expired
-      if (this.pricingData) {
-        console.log('⚠️ Returning expired cached data due to file read error');
-        return this.pricingData;
-      }
-      
-      // Return empty data as fallback
-      return {
-        items: [],
-        total_count: 0,
-        last_updated: new Date().toISOString(),
-        error: `Failed to read pricing CSV: ${error.message}`,
-        headers: [],
-        source: 'local-csv-error'
-      };
+      console.error('❌ Initialization error:', error.message);
+      // Set empty data for fallback
+      this.pricingData = { items: [], headers: ['Prod', 'PUBLICO TIENDA'] };
+      this.isInitialized = true;
     }
   }
   
-  /**
-   * Enhanced product search using OpenAI embeddings
-   */
-  async findRelevantProducts(query, maxResults = 20) {
+  async _loadCSVData() {
+    if (!fs.existsSync(this.csvFilePath)) {
+      throw new Error(`CSV file not found: ${this.csvFilePath}`);
+    }
+    
+    const csvContent = fs.readFileSync(this.csvFilePath, 'utf8');
+    const lines = csvContent.split('\n').filter(line => line.trim());
+    
+    if (lines.length < 2) {
+      throw new Error('Invalid CSV: no data rows');
+    }
+    
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const items = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+      
+      if (values[0] && values[0].trim()) {
+        const productName = values[0].trim();
+        const price = this._parsePrice(values[1]);
+        
+        // Create item for backward compatibility
+        const item = {};
+        headers.forEach((header, index) => {
+          item[header] = values[index] || '';
+        });
+        items.push(item);
+        
+        // Generate unique ID for vector store
+        const productId = `product_${i}_${productName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)}`;
+        
+        // Extract metadata for semantic search
+        const metadata = {
+          brand: this._extractBrand(productName),
+          deviceModel: this._extractDeviceFromName(productName),
+          serviceType: this._extractServiceType(productName),
+          qualityType: this._extractQualityType(productName),
+          originalIndex: i,
+          hasValidPrice: price > 0
+        };
+        
+        // Store in products map
+        this.products.set(productId, {
+          id: productId,
+          name: productName,
+          price: price,
+          metadata: metadata,
+          originalItem: item // Keep reference for compatibility
+        });
+      }
+    }
+    
+    this.pricingData = { items, headers };
+    console.log(`📋 Loaded ${items.length} products from CSV`);
+  }
+  
+  async searchProducts(query, maxResults = 20) {
     try {
-      if (!this.pricingData || this.pricingData.items.length === 0) {
-        console.log('⚠️ No pricing data available for embedding search');
+      await this.initialize();
+      
+      if (this.products.size === 0) {
+        console.log('⚠️ No products available');
         return [];
       }
       
-      console.log('🔍 Searching products with embeddings for:', query);
+      console.log(`🔍 Semantic search for: "${query}"`);
       
-      // Generate embedding for user query
+      // Generate query embedding for semantic search
       const queryEmbedding = await this._generateEmbedding(query);
-      
       if (!queryEmbedding) {
-        console.log('⚠️ Failed to generate query embedding, falling back to keyword search');
         return this._fallbackKeywordSearch(query, maxResults);
       }
       
-      // Calculate similarity scores
+      // Calculate semantic similarities
       const similarities = [];
       
-      for (const item of this.pricingData.items) {
-        const productKey = this._getProductKey(item);
-        const productEmbedding = this.productEmbeddings.get(productKey);
+      for (const [productId, vectorData] of this.vectorStore) {
+        const similarity = this._cosineSimilarity(queryEmbedding, vectorData.embedding);
         
-        if (productEmbedding) {
-          const similarity = this._cosineSimilarity(queryEmbedding, productEmbedding);
+        if (similarity > 0.12) { // Lower threshold for better matching
+          const product = this.products.get(productId);
+          
           similarities.push({
-            item,
-            similarity,
-            productKey
+            ...product.originalItem, // Return original item format for compatibility
+            _similarity: similarity,
+            _productId: productId,
+            _metadata: product.metadata,
+            _semanticMatch: true
           });
         }
       }
       
-      // Sort by similarity and return top results
-      similarities.sort((a, b) => b.similarity - a.similarity);
+      // Sort by semantic similarity
+      similarities.sort((a, b) => b._similarity - a._similarity);
       
-      const results = similarities.slice(0, maxResults).map(s => ({
-        ...s.item,
-        _similarity: s.similarity,
-        _productKey: s.productKey
-      }));
+      console.log(`🎯 Found ${similarities.length} semantic matches`);
       
-      console.log(`✅ Found ${results.length} products using embeddings`);
-      console.log('🎯 Top similarities:', results.slice(0, 3).map(r => 
-        `${r._productKey}: ${(r._similarity * 100).toFixed(1)}%`
-      ));
+      if (similarities.length === 0) {
+        console.log('🔄 No semantic matches, trying keyword search...');
+        return this._fallbackKeywordSearch(query, maxResults);
+      }
       
-      return results;
+      // Extract device model for exact filtering
+      const deviceModel = this._extractExactDeviceModel(query);
+      let results = similarities;
+      
+      // Apply exact model filtering if device detected
+      if (deviceModel !== 'unknown') {
+        console.log(`🔍 Filtering for exact model: "${deviceModel}"`);
+        const exactMatches = this._filterByExactModel(similarities, deviceModel);
+        
+        if (exactMatches.length > 0) {
+          results = exactMatches;
+          console.log(`✅ Found ${exactMatches.length} exact model matches`);
+        } else {
+          // Find closest alternatives for approximate matching
+          console.log('🔄 No exact matches, finding closest alternatives...');
+          results = this._findClosestAlternatives(similarities, deviceModel);
+          
+          // Mark as approximate matches
+          results.forEach(result => {
+            result._isApproximate = true;
+            result._exactModelRequested = deviceModel;
+          });
+        }
+      }
+      
+      const finalResults = results.slice(0, maxResults);
+      console.log(`✅ Returning ${finalResults.length} results`);
+      
+      return finalResults;
       
     } catch (error) {
-      console.error('❌ Embedding search error:', error.message);
+      console.error('❌ Search error:', error.message);
       return this._fallbackKeywordSearch(query, maxResults);
     }
   }
   
-  /**
-   * Get ALL quality options for a specific device/service - FIXED EXACT MATCHING
-   */
-  async findAllQualityOptions(device, service) {
-    try {
-      const query = `${device} ${service}`;
-      const allResults = await this.findRelevantProducts(query, 100);
-      
-      console.log(`🔍 Filtering results for EXACT device match: "${device}"`);
-      
-      // Group by device and service to find all quality variants
-      const qualityGroups = new Map();
-      
-      for (const item of allResults) {
-        const enhanced = item._enhanced;
-        
-        // STRICT EXACT MATCHING - no more iPhone 14 Plus when searching iPhone 14
-        if (this._exactDeviceAndServiceMatch(enhanced, device, service)) {
-          const baseKey = `${enhanced.brand}_${enhanced.device}_${enhanced.service}`;
-          
-          if (!qualityGroups.has(baseKey)) {
-            qualityGroups.set(baseKey, []);
-          }
-          
-          qualityGroups.get(baseKey).push({
-            ...item,
-            quality: enhanced.quality,
-            price: this._extractValidPrice(item),
-            baseKey,
-            originalName: enhanced.originalName
-          });
-        }
-      }
-      
-      // Return all quality options grouped
-      const result = [];
-      for (const [baseKey, options] of qualityGroups) {
-        // Sort by price (lowest first)
-        options.sort((a, b) => (a.price || 999999) - (b.price || 999999));
-        result.push({
-          baseKey,
-          device,
-          service,
-          options
-        });
-      }
-      
-      console.log(`🎯 Found ${result.length} quality groups for EXACT match: ${device} ${service}`);
-      
-      // Debug logging for iPhone 14 issue
-      if (device.includes('iphone 14') && !device.includes('plus') && !device.includes('pro')) {
-        console.log('🔍 DEBUG - iPhone 14 exact matching results:');
-        result.forEach(group => {
-          group.options.forEach(option => {
-            console.log(`  - ${option.originalName}: ${option.price} UYU`);
-          });
-        });
-      }
-      
-      return result;
-      
-    } catch (error) {
-      console.error('❌ Error finding quality options:', error.message);
-      return [];
-    }
-  }
-  
-  /**
-   * Enhanced item processing to extract device info, service type, quality
-   */
-  _enhanceProductItem(item, headers) {
-    const productName = (item[headers[0]] || '').toLowerCase();
+  _extractExactDeviceModel(query) {
+    const queryLower = query.toLowerCase();
     
-    // Extract device brand
-    const brand = this._extractBrand(productName);
-    
-    // Extract device model - PRECISE MATCHING
-    const device = this._extractDevicePrecise(productName);
-    
-    // Extract service type
-    const service = this._extractService(productName);
-    
-    // Extract quality type
-    const quality = this._extractQuality(productName);
-    
-    return {
-      brand,
-      device, 
-      service,
-      quality,
-      originalName: item[headers[0]] || '',
-      searchableText: productName
-    };
-  }
-  
-  /**
-   * Extract brand from product name
-   */
-  _extractBrand(productName) {
-    const brands = [
-      'iphone', 'apple', 'samsung', 'galaxy', 'huawei', 'xiaomi', 'redmi', 'mi',
-      'motorola', 'moto', 'nokia', 'lg', 'sony', 'google', 'pixel', 'honor',
-      'oppo', 'vivo', 'realme', 'oneplus', 'asus', 'caterpillar', 'cat',
-      'lenovo', 'tcl', 'tecno', 'wiko', 'zte'
-    ];
-    
-    for (const brand of brands) {
-      if (productName.includes(brand)) {
-        // Normalize brand names
-        if (brand === 'galaxy') return 'samsung';
-        if (brand === 'redmi' || brand === 'mi') return 'xiaomi';
-        if (brand === 'moto') return 'motorola';
-        if (brand === 'pixel') return 'google';
-        if (brand === 'cat') return 'caterpillar';
-        return brand;
-      }
-    }
-    
-    return 'unknown';
-  }
-  
-  /**
-   * Extract device model from product name - PRECISE MATCHING TO FIX iPhone 14/Plus issue
-   */
-  _extractDevicePrecise(productName) {
-    // iPhone models - EXACT matching to avoid 14 Plus when searching for 14
+    // iPhone patterns with exact matching
     const iphonePatterns = [
       { pattern: /iphone\s*15\s*pro\s*max/i, model: 'iphone 15 pro max' },
-      { pattern: /iphone\s*15\s*pro/i, model: 'iphone 15 pro' },
+      { pattern: /iphone\s*15\s*pro(?!\s*max)/i, model: 'iphone 15 pro' },
       { pattern: /iphone\s*15\s*plus/i, model: 'iphone 15 plus' },
-      { pattern: /iphone\s*15(?!\s*pro|plus)/i, model: 'iphone 15' },
+      { pattern: /iphone\s*15(?!\s*pro|\s*plus)/i, model: 'iphone 15' },
       { pattern: /iphone\s*14\s*pro\s*max/i, model: 'iphone 14 pro max' },
-      { pattern: /iphone\s*14\s*pro/i, model: 'iphone 14 pro' },
+      { pattern: /iphone\s*14\s*pro(?!\s*max)/i, model: 'iphone 14 pro' },
       { pattern: /iphone\s*14\s*plus/i, model: 'iphone 14 plus' },
-      { pattern: /iphone\s*14(?!\s*pro|\s*plus)/i, model: 'iphone 14' }, // Negative lookahead
+      { pattern: /iphone\s*14(?!\s*pro|\s*plus)/i, model: 'iphone 14' }, // EXACT iPhone 14, not Pro
       { pattern: /iphone\s*13\s*pro\s*max/i, model: 'iphone 13 pro max' },
-      { pattern: /iphone\s*13\s*pro/i, model: 'iphone 13 pro' },
+      { pattern: /iphone\s*13\s*pro(?!\s*max)/i, model: 'iphone 13 pro' },
       { pattern: /iphone\s*13\s*mini/i, model: 'iphone 13 mini' },
-      { pattern: /iphone\s*13(?!\s*pro|\s*mini)/i, model: 'iphone 13' },
-      { pattern: /iphone\s*12\s*pro\s*max/i, model: 'iphone 12 pro max' },
-      { pattern: /iphone\s*12\s*pro/i, model: 'iphone 12 pro' },
-      { pattern: /iphone\s*12\s*mini/i, model: 'iphone 12 mini' },
-      { pattern: /iphone\s*12(?!\s*pro|\s*mini)/i, model: 'iphone 12' },
-      { pattern: /iphone\s*11\s*pro\s*max/i, model: 'iphone 11 pro max' },
-      { pattern: /iphone\s*11\s*pro/i, model: 'iphone 11 pro' },
-      { pattern: /iphone\s*11(?!\s*pro)/i, model: 'iphone 11' },
-      { pattern: /iphone\s*xs\s*max/i, model: 'iphone xs max' },
-      { pattern: /iphone\s*xs/i, model: 'iphone xs' },
-      { pattern: /iphone\s*xr/i, model: 'iphone xr' },
-      { pattern: /iphone\s*x(?!\s*s|r)/i, model: 'iphone x' },
-      { pattern: /iphone\s*se/i, model: 'iphone se' }
+      { pattern: /iphone\s*13(?!\s*pro|\s*mini)/i, model: 'iphone 13' }
     ];
     
-    // Check iPhone patterns in order (most specific first)
     for (const { pattern, model } of iphonePatterns) {
-      if (pattern.test(productName)) {
+      if (pattern.test(queryLower)) {
         return model;
       }
     }
     
-    // Samsung Galaxy models
-    const galaxyMatch = productName.match(/galaxy\s*([a-z]\d+|note\s*\d+|s\d+)/i);
-    if (galaxyMatch) {
-      return `galaxy ${galaxyMatch[1].toLowerCase()}`;
-    }
-    
-    // Generic model extraction
-    const modelMatch = productName.match(/\b([a-z]*\d+[a-z]*(?:\s*(?:pro|max|plus|mini|lite|se|ultra|note|edge|fold|flip))*)\b/i);
-    if (modelMatch) {
-      return modelMatch[1].toLowerCase();
-    }
-    
     return 'unknown';
   }
   
-  /**
-   * Extract service type from product name
-   */
-  _extractService(productName) {
-    const serviceMap = {
-      'pantalla': ['pantalla', 'display', 'screen', 'lcd', 'oled'],
-      'bateria': ['bateria', 'batería', 'battery'],
-      'camara': ['camara', 'cámara', 'camera', 'lente'],
-      'carga': ['carga', 'charging', 'conector', 'puerto'],
-      'altavoz': ['altavoz', 'speaker', 'audio'],
-      'tactil': ['tactil', 'táctil', 'touch'],
-      'vidrio': ['vidrio', 'glass', 'cristal'],
-      'tapa': ['tapa', 'cover', 'back', 'trasera'],
-      'flex': ['flex', 'flexible'],
-      'agua': ['agua', 'water', 'mojado'],
-      'reparacion': ['reparacion', 'reparación', 'repair']
-    };
-    
-    for (const [serviceType, keywords] of Object.entries(serviceMap)) {
-      for (const keyword of keywords) {
-        if (productName.includes(keyword)) {
-          return serviceType;
-        }
+  _filterByExactModel(results, targetModel) {
+    return results.filter(item => {
+      const productName = (item.Prod || '').toLowerCase();
+      const targetLower = targetModel.toLowerCase();
+      
+      // For iPhone 14 (not Pro), exclude Pro variants
+      if (targetModel === 'iphone 14') {
+        return productName.includes('iphone 14') && 
+               !productName.includes('pro') && 
+               !productName.includes('plus');
       }
-    }
-    
-    return 'general';
-  }
-  
-  /**
-   * Extract quality type from product name
-   */
-  _extractQuality(productName) {
-    const qualityKeywords = {
-      'original': ['original', 'ori', 'oem', 'genuine'],
-      'compatible': ['compatible', 'comp', 'aftermarket'],
-      'incell': ['incell', 'in-cell'],
-      'oled': ['oled', 'amoled'],
-      'lcd': ['lcd', 'ips'],
-      'premium': ['premium', 'high quality', 'hq'],
-      'economic': ['economic', 'eco', 'basic']
-    };
-    
-    for (const [quality, keywords] of Object.entries(qualityKeywords)) {
-      for (const keyword of keywords) {
-        if (productName.includes(keyword)) {
-          return quality;
-        }
+      
+      // For iPhone 14 Pro (not Max), exclude Max variants
+      if (targetModel === 'iphone 14 pro') {
+        return productName.includes('iphone 14') && 
+               productName.includes('pro') && 
+               !productName.includes('max');
       }
-    }
-    
-    return 'standard';
+      
+      // For other models, exact match
+      return productName.includes(targetLower);
+    });
   }
   
-  /**
-   * EXACT device and service matching - FIXED to prevent iPhone 14 Plus matching iPhone 14
-   */
-  _exactDeviceAndServiceMatch(enhanced, targetDevice, targetService) {
-    const deviceLower = targetDevice.toLowerCase().trim();
-    const serviceLower = targetService.toLowerCase().trim();
-    const enhancedDevice = enhanced.device.toLowerCase().trim();
-    const enhancedService = enhanced.service.toLowerCase().trim();
-    
-    // EXACT device matching - must be exactly the same
-    const deviceMatch = enhancedDevice === deviceLower;
-    
-    // Service matching
-    const serviceMatch = enhancedService === serviceLower || 
-                        enhanced.originalName.toLowerCase().includes(serviceLower);
-    
-    console.log(`🔍 Exact match check: "${enhancedDevice}" === "${deviceLower}" = ${deviceMatch}, service = ${serviceMatch}`);
-    
-    return deviceMatch && serviceMatch;
-  }
-  
-  /**
-   * Load or generate embeddings for all products
-   */
-  async _loadOrGenerateEmbeddings() {
+  async _embeddingSearch(query, maxResults) {
     try {
-      // Try to load existing embeddings
-      if (fs.existsSync(this.embeddingsCacheFile)) {
-        console.log('📁 Loading cached embeddings...');
-        const cached = JSON.parse(fs.readFileSync(this.embeddingsCacheFile, 'utf8'));
+      // Generate query embedding
+      const queryEmbedding = await this._generateEmbedding(query);
+      if (!queryEmbedding) {
+        return [];
+      }
+      
+      const results = [];
+      
+      for (const item of this.pricingData.items) {
+        const productText = this._getProductText(item);
+        const productKey = this._getProductKey(productText);
+        const embedding = this.productEmbeddings.get(productKey);
         
-        // Convert array format back to Map
-        for (const [key, embedding] of cached) {
-          this.productEmbeddings.set(key, embedding);
+        if (embedding) {
+          const similarity = this._cosineSimilarity(queryEmbedding, embedding);
+          
+          // LOWERED THRESHOLD from 0.3 to 0.15 for better matching
+          if (similarity > 0.15) {
+            results.push({
+              ...item,
+              _similarity: similarity,
+              _productText: productText
+            });
+          }
+        }
+      }
+      
+      // Sort by similarity
+      results.sort((a, b) => b._similarity - a._similarity);
+      
+      console.log(`🎯 Embedding search found ${results.length} products`);
+      if (results.length > 0) {
+        console.log(`   Top similarity: ${(results[0]._similarity * 100).toFixed(1)}%`);
+      }
+      
+      return results.slice(0, maxResults);
+      
+    } catch (error) {
+      console.error('❌ Embedding search error:', error.message);
+      return [];
+    }
+  }
+  
+  _fallbackKeywordSearch(query, maxResults) {
+    console.log('🔄 Using keyword search as fallback');
+    
+    const queryLower = query.toLowerCase();
+    const keywords = queryLower.split(' ').filter(k => k.length > 2);
+    
+    // Add Spanish translations
+    const translations = {
+      'screen': 'pantalla',
+      'battery': 'bateria',
+      'camera': 'camara',
+      'charging': 'carga',
+      'speaker': 'altavoz'
+    };
+    
+    // Add translated keywords
+    keywords.forEach(keyword => {
+      if (translations[keyword]) {
+        keywords.push(translations[keyword]);
+      }
+    });
+    
+    console.log(`🔍 Keyword search terms: ${keywords.join(', ')}`);
+    
+    const results = [];
+    
+    for (const product of this.products.values()) {
+      const productText = product.name.toLowerCase();
+      let score = 0;
+      
+      for (const keyword of keywords) {
+        if (productText.includes(keyword)) {
+          score += 1;
+        }
+      }
+      
+      if (score > 0) {
+        results.push({
+          ...product.originalItem,
+          _score: score,
+          _keywordMatch: true,
+          _metadata: product.metadata
+        });
+      }
+    }
+    
+    // Sort by score
+    results.sort((a, b) => b._score - a._score);
+    
+    console.log(`✅ Keyword search found ${results.length} products`);
+    
+    return results.slice(0, maxResults);
+  }
+  
+  _filterByExactModel(results, targetModel) {
+    return results.filter(item => {
+      const metadata = item._metadata;
+      const deviceModel = metadata.deviceModel.toLowerCase();
+      const targetLower = targetModel.toLowerCase();
+      
+      // For iPhone 14 (not Pro), exclude Pro variants
+      if (targetModel === 'iphone 14') {
+        return deviceModel.includes('iphone 14') && 
+               !deviceModel.includes('pro') && 
+               !deviceModel.includes('plus');
+      }
+      
+      // For iPhone 14 Pro (not Max), exclude Max variants
+      if (targetModel === 'iphone 14 pro') {
+        return deviceModel.includes('iphone 14') && 
+               deviceModel.includes('pro') && 
+               !deviceModel.includes('max');
+      }
+      
+      // For other models, check if target is contained in device model
+      return deviceModel.includes(targetLower);
+    });
+  }
+  
+  async _loadOrGenerateVectorStore() {
+    try {
+      // Try to load existing vector cache
+      if (fs.existsSync(this.vectorCacheFile)) {
+        console.log('📁 Loading vector cache...');
+        const cached = JSON.parse(fs.readFileSync(this.vectorCacheFile, 'utf8'));
+        
+        // Rebuild vector store from cache
+        for (const [productId, vectorData] of cached) {
+          this.vectorStore.set(productId, vectorData);
         }
         
-        console.log(`✅ Loaded ${this.productEmbeddings.size} cached embeddings`);
+        console.log(`✅ Loaded ${this.vectorStore.size} vectors from cache`);
         
-        // Check if we need to generate new embeddings
-        const existingKeys = new Set(this.productEmbeddings.keys());
-        const currentKeys = new Set(this.pricingData.items.map(item => this._getProductKey(item)));
+        // Check if we need to generate new vectors
+        const existingIds = new Set(this.vectorStore.keys());
+        const currentIds = new Set(this.products.keys());
         
-        const newItems = this.pricingData.items.filter(item => 
-          !existingKeys.has(this._getProductKey(item))
+        const newProducts = Array.from(this.products.values()).filter(product => 
+          !existingIds.has(product.id)
         );
         
-        if (newItems.length > 0) {
-          console.log(`🔄 Generating embeddings for ${newItems.length} new products...`);
-          await this._generateNewEmbeddings(newItems);
+        if (newProducts.length > 0) {
+          console.log(`🔄 Generating vectors for ${newProducts.length} new products...`);
+          await this._generateVectorsForProducts(newProducts);
         }
         
         return;
       }
       
-      // Generate all embeddings
-      console.log('🔄 Generating embeddings for all products...');
-      await this._generateAllEmbeddings();
+      // Generate all vectors
+      console.log('🔄 Generating vectors for all products...');
+      await this._generateVectorsForProducts(Array.from(this.products.values()));
       
     } catch (error) {
-      console.error('❌ Error with embeddings:', error.message);
-      // Continue without embeddings - fallback to keyword search
+      console.error('❌ Vector store error:', error.message);
+      // Continue without vectors - will use keyword search
     }
   }
   
-  /**
-   * Generate embeddings for all products
-   */
-  async _generateAllEmbeddings() {
-    const batchSize = 20; // Process in batches to avoid rate limits
-    const items = this.pricingData.items;
+  async _generateVectorsForProducts(products) {
+    const batchSize = 10; // Process in smaller batches
     
-    for (let i = 0; i < items.length; i += batchSize) {
-      const batch = items.slice(i, i + batchSize);
+    for (let i = 0; i < products.length; i += batchSize) {
+      const batch = products.slice(i, i + batchSize);
       
-      console.log(`🔄 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(items.length/batchSize)}`);
+      console.log(`🔄 Processing batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(products.length/batchSize)}`);
       
-      await Promise.all(batch.map(async (item) => {
+      for (const product of batch) {
         try {
-          const productKey = this._getProductKey(item);
-          const searchText = this._getSearchableText(item);
-          const embedding = await this._generateEmbedding(searchText);
+          // Embed only the product name (not price)
+          const embedding = await this._generateEmbedding(product.name);
           
           if (embedding) {
-            this.productEmbeddings.set(productKey, embedding);
+            this.vectorStore.set(product.id, {
+              embedding: embedding,
+              metadata: product.metadata
+            });
           }
+          
+          // Rate limiting
+          await new Promise(resolve => setTimeout(resolve, 150));
         } catch (error) {
-          console.error(`⚠️ Failed to generate embedding for ${this._getProductKey(item)}:`, error.message);
+          console.error(`⚠️ Failed to generate vector for ${product.name}:`, error.message);
         }
-      }));
-      
-      // Rate limiting
-      if (i + batchSize < items.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
     
-    console.log(`✅ Generated embeddings for ${this.productEmbeddings.size} products`);
-    await this._saveEmbeddingsCache();
+    await this._saveVectorCache();
+    console.log(`✅ Generated vectors for ${this.vectorStore.size} products`);
   }
   
-  /**
-   * Generate embeddings for new items only
-   */
-  async _generateNewEmbeddings(newItems) {
-    for (const item of newItems) {
-      try {
-        const productKey = this._getProductKey(item);
-        const searchText = this._getSearchableText(item);
-        const embedding = await this._generateEmbedding(searchText);
-        
-        if (embedding) {
-          this.productEmbeddings.set(productKey, embedding);
-        }
-      } catch (error) {
-        console.error(`⚠️ Failed to generate embedding for ${this._getProductKey(item)}:`, error.message);
+  async _saveVectorCache() {
+    try {
+      const vectorArray = Array.from(this.vectorStore.entries());
+      fs.writeFileSync(this.vectorCacheFile, JSON.stringify(vectorArray, null, 2));
+      console.log('💾 Vector cache saved');
+    } catch (error) {
+      console.error('⚠️ Failed to save vector cache:', error.message);
+    }
+  }
+  
+  _findClosestAlternatives(similarities, requestedModel) {
+    // Find products from the same brand and similar service type
+    const requestedBrand = this._extractBrand(requestedModel);
+    const requestedService = this._extractServiceFromQuery(requestedModel);
+    
+    return similarities.filter(item => {
+      const metadata = item._metadata;
+      return metadata.brand === requestedBrand || 
+             metadata.serviceType === requestedService ||
+             item._similarity > 0.25; // High semantic similarity
+    });
+  }
+  
+  _parsePrice(priceStr) {
+    if (!priceStr) return 0;
+    const price = parseFloat(priceStr.toString().replace(/[^0-9.]/g, ''));
+    return isNaN(price) ? 0 : price;
+  }
+  
+  _extractBrand(productName) {
+    const nameLower = productName.toLowerCase();
+    
+    if (nameLower.includes('iphone') || nameLower.includes('apple')) return 'apple';
+    if (nameLower.includes('samsung') || nameLower.includes('galaxy')) return 'samsung';
+    if (nameLower.includes('xiaomi') || nameLower.includes('redmi')) return 'xiaomi';
+    if (nameLower.includes('huawei')) return 'huawei';
+    if (nameLower.includes('motorola')) return 'motorola';
+    if (nameLower.includes('nokia')) return 'nokia';
+    
+    return 'unknown';
+  }
+  
+  _extractDeviceFromName(productName) {
+    const nameLower = productName.toLowerCase();
+    
+    // iPhone patterns
+    const iphoneMatch = nameLower.match(/iphone\s*(\d+(?:\s*pro(?:\s*max)?)?|\s*plus|\s*mini|se|xr|xs|x)/i);
+    if (iphoneMatch) {
+      return `iphone ${iphoneMatch[1].replace(/\s+/g, ' ').trim()}`;
+    }
+    
+    // Samsung patterns
+    if (nameLower.includes('samsung') || nameLower.includes('galaxy')) {
+      const galaxyMatch = nameLower.match(/(?:galaxy\s*)?([a-z]\d+|note\s*\d+|s\d+)/i);
+      if (galaxyMatch) {
+        return `samsung ${galaxyMatch[1]}`;
       }
     }
     
-    await this._saveEmbeddingsCache();
+    return 'unknown';
   }
   
-  /**
-   * Generate embedding for text using OpenAI
-   */
+  _extractServiceType(productName) {
+    const nameLower = productName.toLowerCase();
+    
+    if (nameLower.includes('pantalla') || nameLower.includes('display') || nameLower.includes('screen')) return 'pantalla';
+    if (nameLower.includes('bateria') || nameLower.includes('battery')) return 'bateria';
+    if (nameLower.includes('camara') || nameLower.includes('camera') || nameLower.includes('lente')) return 'camara';
+    if (nameLower.includes('altavoz') || nameLower.includes('speaker')) return 'altavoz';
+    if (nameLower.includes('flex') || nameLower.includes('cable')) return 'flex';
+    if (nameLower.includes('tapa') || nameLower.includes('cover')) return 'tapa';
+    if (nameLower.includes('antena') || nameLower.includes('wifi')) return 'antena';
+    
+    return 'general';
+  }
+  
+  _extractQualityType(productName) {
+    const nameLower = productName.toLowerCase();
+    
+    if (nameLower.includes('original') || nameLower.includes('oem')) return 'original';
+    if (nameLower.includes('compatible') || nameLower.includes('comp')) return 'compatible';
+    if (nameLower.includes('incell') || nameLower.includes('in-cell')) return 'incell';
+    if (nameLower.includes('oled') || nameLower.includes('amoled')) return 'oled';
+    if (nameLower.includes('lcd')) return 'lcd';
+    
+    return 'standard';
+  }
+  
+  _extractServiceFromQuery(query) {
+    const queryLower = query.toLowerCase();
+    
+    if (queryLower.includes('pantalla') || queryLower.includes('screen') || queryLower.includes('display')) return 'pantalla';
+    if (queryLower.includes('bateria') || queryLower.includes('battery')) return 'bateria';
+    if (queryLower.includes('camara') || queryLower.includes('camera')) return 'camara';
+    
+    return 'general';
+  }
+  
   async _generateEmbedding(text) {
     try {
       const response = await this.openai.embeddings.create({
-        model: "text-embedding-3-small", // Cost-effective embedding model
-        input: text.substring(0, 8000), // Limit text length
+        model: "text-embedding-3-small",
+        input: text.substring(0, 8000),
         encoding_format: "float"
       });
       
       return response.data[0].embedding;
-      
     } catch (error) {
       console.error('❌ OpenAI embedding error:', error.message);
       return null;
     }
   }
   
-  /**
-   * Calculate cosine similarity between two embeddings
-   */
   _cosineSimilarity(a, b) {
     if (a.length !== b.length) return 0;
     
@@ -560,121 +564,32 @@ class EnhancedPricingService {
     }
     
     if (normA === 0 || normB === 0) return 0;
-    
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
   
-  /**
-   * Save embeddings to cache file
-   */
-  async _saveEmbeddingsCache() {
-    try {
-      // Convert Map to array for JSON serialization
-      const embeddingsArray = Array.from(this.productEmbeddings.entries());
-      fs.writeFileSync(this.embeddingsCacheFile, JSON.stringify(embeddingsArray, null, 2));
-      console.log('💾 Embeddings cache saved');
-    } catch (error) {
-      console.error('⚠️ Failed to save embeddings cache:', error.message);
-    }
+  _getProductText(item) {
+    const productName = item.Prod || '';
+    const price = this._getPrice(item);
+    return `${productName} ${price > 0 ? price + ' UYU' : ''}`;
   }
   
-  /**
-   * Get unique key for a product
-   */
-  _getProductKey(item) {
-    const enhanced = item._enhanced;
-    if (enhanced) {
-      return `${enhanced.brand}_${enhanced.device}_${enhanced.service}_${enhanced.quality}`;
-    }
-    
-    // Fallback
-    const firstCol = Object.values(item)[0] || '';
-    return firstCol.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '_');
+  _getProductKey(text) {
+    return text.substring(0, 100).replace(/[^a-zA-Z0-9]/g, '_');
   }
   
-  /**
-   * Get searchable text for a product
-   */
-  _getSearchableText(item) {
-    const enhanced = item._enhanced;
-    if (enhanced) {
-      return `${enhanced.originalName} ${enhanced.brand} ${enhanced.device} ${enhanced.service} ${enhanced.quality}`;
-    }
-    
-    // Fallback - use first column
-    return Object.values(item)[0] || '';
-  }
-  
-  /**
-   * Extract valid price from item, handling 0 UYU issues
-   */
-  _extractValidPrice(item) {
-    // Try multiple price columns
-    const priceFields = ['PUBLICO TIENDA', 'price', 'precio', 'cost', 'costo'];
+  _getPrice(item) {
+    const priceFields = ['PUBLICO TIENDA', 'price', 'precio'];
     
     for (const field of priceFields) {
       if (item[field]) {
         const price = parseFloat(item[field].toString().replace(/[^0-9.]/g, ''));
-        if (price > 0) {
+        if (!isNaN(price) && price > 0) {
           return price;
         }
       }
     }
-    
-    return null; // Return null for invalid prices
-  }
-  
-  /**
-   * Fallback keyword search when embeddings fail
-   */
-  _fallbackKeywordSearch(query, maxResults = 20) {
-    console.log('🔄 Using fallback keyword search');
-    
-    const queryLower = query.toLowerCase();
-    const keywords = queryLower.split(' ').filter(k => k.length > 2);
-    
-    const results = this.pricingData.items
-      .map(item => {
-        const text = this._getSearchableText(item).toLowerCase();
-        let score = 0;
-        
-        for (const keyword of keywords) {
-          if (text.includes(keyword)) {
-            score += 1;
-          }
-        }
-        
-        return { item, score };
-      })
-      .filter(r => r.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxResults)
-      .map(r => r.item);
-    
-    console.log(`✅ Keyword search found ${results.length} results`);
-    return results;
-  }
-  
-  /**
-   * Clear cache
-   */
-  clearCache() {
-    this.pricingData = null;
-    this.lastFetch = null;
-    this.productEmbeddings.clear();
-    console.log('🗑️ Enhanced pricing cache cleared');
-  }
-  
-  /**
-   * Clear embeddings cache
-   */
-  clearEmbeddingsCache() {
-    this.productEmbeddings.clear();
-    if (fs.existsSync(this.embeddingsCacheFile)) {
-      fs.unlinkSync(this.embeddingsCacheFile);
-    }
-    console.log('🗑️ Embeddings cache cleared');
+    return 0;
   }
 }
 
-module.exports = new EnhancedPricingService();
+module.exports = new FixedPricingService();

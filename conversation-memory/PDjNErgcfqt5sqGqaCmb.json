@@ -1,0 +1,276 @@
+{
+  "contact_id": "PDjNErgcfqt5sqGqaCmb",
+  "created": "2025-11-13T05:46:01.415Z",
+  "last_updated": "2025-11-13T06:27:24.917Z",
+  "message_count": 17,
+  "messages": [
+    {
+      "timestamp": "2025-11-13T05:46:01.415Z",
+      "role": "user",
+      "content": "Hello test",
+      "metadata": {
+        "message_id": "msg_1763012761415_qj7m2o7gm",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:15:36.199Z",
+      "role": "user",
+      "content": "Hello",
+      "metadata": {
+        "message_id": "msg_1763014536199_ytfj819u0",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:15:38.113Z",
+      "role": "assistant",
+      "content": "¡Hola Meesam! ¿En qué puedo ayudarte hoy?",
+      "metadata": {
+        "message_id": "msg_1763014538113_5dyu6jd64",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "unknown",
+          "device_model": "unknown",
+          "service_type": "consulta general",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:16:00.528Z",
+      "role": "user",
+      "content": "Can you tell me the price of battery replacement of iPhone 15",
+      "metadata": {
+        "message_id": "msg_1763014560528_0yiymx7er",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:16:03.233Z",
+      "role": "assistant",
+      "content": "No tenemos el modelo exacto \"iPhone 15\" en nuestra base de datos en este momento. Sin embargo, tenemos modelos similares con los siguientes precios de reemplazo de batería:\n\n- Batería iPhone 14: 6990 UYU\n- Batería iPhone 14 Pro: 6990 UYU\n\nTu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles. ¿Hay algo más en lo que pueda ayudarte hoy?",
+      "metadata": {
+        "message_id": "msg_1763014563233_9z9d0qrxr",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 15",
+          "service_type": "bateria",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:18:36.186Z",
+      "role": "user",
+      "content": "And iPhone 13?",
+      "metadata": {
+        "message_id": "msg_1763014716186_l3r045ulu",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:18:39.696Z",
+      "role": "assistant",
+      "content": "Para el iPhone 13 tenemos las siguientes opciones disponibles:\n• Altavoz iPhone 13: 1900 UYU\n• Pantalla iPhone 13: 21590 UYU\n• Batería iPhone 13: 3990 UYU\n• Pantalla iPhone 13 Pro: 23790 UYU\n• Altavoz iPhone 13 Mini: 1900 UYU\n• Pantalla iPhone 13 (Ori Glass): 16300 UYU\n• Tapa iPhone 13 Mini: 5500 UYU\n• Pantalla iPhone 13 Mini: 24590 UYU\n• Pantalla iPhone 13 Incell (Ori IC): 7895 UYU\n• Flex Cámara Principal iPhone 13: 7490 UYU\n• Lens de Cámara iPhone 13 / 13 Mini: 2000 UYU\n• Flex Face ID JC iPhone 13: 3600 UYU\n• Tapa iPhone 13 Negro: 5500 UYU\n• Batería iPhone 13 Pro: 3990 UYU\n• Altavoz iPhone 13 Pro Max: 2500 UYU\n\n¿Te interesa alguno de estos productos para tu iPhone 13?",
+      "metadata": {
+        "message_id": "msg_1763014719696_hf67379fn",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 13",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:19:46.258Z",
+      "role": "user",
+      "content": "Since I was asking for battery then only tell about it’s battery",
+      "metadata": {
+        "message_id": "msg_1763014786258_cc312qg6t",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:19:48.903Z",
+      "role": "assistant",
+      "content": "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles de baterías de acuerdo a tu modelo de celular. ¡Gracias por tu paciencia, Meesam!",
+      "metadata": {
+        "message_id": "msg_1763014788903_lb7s7i68p",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "unknown",
+          "device_model": "unknown",
+          "service_type": "bateria",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:22:58.171Z",
+      "role": "user",
+      "content": "And iPhone 13?",
+      "metadata": {
+        "message_id": "msg_1763014978172_gxuxsjfi4",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:22:59.963Z",
+      "role": "assistant",
+      "content": "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles de baterías para iPhone 13. ¡Gracias por tu paciencia, Meesam!",
+      "metadata": {
+        "message_id": "msg_1763014979963_eig46lril",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 13",
+          "service_type": "consulta general",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:23:53.547Z",
+      "role": "user",
+      "content": "Screen replacement of iPhone 11",
+      "metadata": {
+        "message_id": "msg_1763015033547_bfaxdpryk",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:23:56.531Z",
+      "role": "assistant",
+      "content": "Para la reparación de pantalla del iPhone 11 tenemos las siguientes opciones disponibles:\n• Pantalla iPhone 11 Original: 6880 UYU\n• Pantalla iPhone 11: 4900 UYU\n• Pantalla iPhone 11 Incell (Ori IC): 2595 UYU\n\n¿Te interesa alguna de estas opciones, Meesam?",
+      "metadata": {
+        "message_id": "msg_1763015036531_zr4wty9r6",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 11",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:26:18.608Z",
+      "role": "user",
+      "content": "Buenas! Para poder ayudarte mejor, ¿me indicas el modelo exacto de tu teléfono y si buscas una pantalla original, compatible o Incell?",
+      "metadata": {
+        "message_id": "msg_1763015178608_56mvpwv4k",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:26:21.669Z",
+      "role": "assistant",
+      "content": "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles de pantallas para iPhone 11. ¡Gracias por tu paciencia, Meesam!",
+      "metadata": {
+        "message_id": "msg_1763015181669_30wcjim3s",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 11",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:27:23.091Z",
+      "role": "user",
+      "content": "Buenas tardes, quisiera saber si tienen pantalla original para iPhone 14 Pro y el precio.",
+      "metadata": {
+        "message_id": "msg_1763015243091_g4bsxnl2c",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-13T06:27:24.917Z",
+      "role": "assistant",
+      "content": "Para la reparación de pantalla del iPhone 14 Pro tenemos las siguientes opciones disponibles:\n• Pantalla iPhone 14 Pro: 29990 UYU\n• Pantalla iPhone 14 Pro (Ori Changed Glass): 19990 UYU\n\n¿Te interesa alguna de estas opciones?",
+      "metadata": {
+        "message_id": "msg_1763015244917_m5mkicog4",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 14",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    }
+  ]
+}

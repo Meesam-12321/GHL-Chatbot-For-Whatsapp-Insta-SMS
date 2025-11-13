@@ -1,8 +1,8 @@
 {
   "contact_id": "BTnPcbtct9rWFWJg9tbW",
   "created": "2025-11-10T09:28:09.537Z",
-  "last_updated": "2025-11-10T11:06:45.880Z",
-  "message_count": 10,
+  "last_updated": "2025-11-12T20:30:48.047Z",
+  "message_count": 20,
   "messages": [
     {
       "timestamp": "2025-11-10T09:28:09.537Z",
@@ -172,6 +172,166 @@
           "conversation_context": "returning"
         },
         "pricing_items_found": 60
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:25:21.674Z",
+      "role": "user",
+      "content": "What’s the price of screen replacement of iPhone 15",
+      "metadata": {
+        "message_id": "msg_1762979121675_e2jknfeal",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:25:21.680Z",
+      "role": "assistant",
+      "content": "¡Hola Meesam Imran! \n\nTu solicitud ha sido registrada. Nuestro equipo te contactará pronto con las opciones disponibles para tu consulta.\n\n🆘 Para urgencias:\n📞 Teléfono: 2200-21-91  \n📱 WhatsApp: 098565349\n\n🏪 SUCURSALES:\n• La Comercial: Carlos Reyles 1750\n• Pocitos: Chucarro 1107\n• Tres Cruces: Mario Cassinoni 1684\n\n✨ Garantía 30 días | 🚚 Retiro a domicilio\n\n¡Gracias por contactar ReparaloYA!",
+      "metadata": {
+        "message_id": "msg_1762979121680_jjvmmy9o2",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "unknown",
+          "device_model": "unknown",
+          "service_type": "consulta general",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "low"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:26:16.087Z",
+      "role": "user",
+      "content": "Do you guys repair iPhones 14?",
+      "metadata": {
+        "message_id": "msg_1762979176087_l0ct2yolc",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:26:16.093Z",
+      "role": "assistant",
+      "content": "¡Hola Meesam Imran! \n\nTu solicitud ha sido registrada. Nuestro equipo te contactará pronto con las opciones disponibles para tu consulta.\n\n🆘 Para urgencias:\n📞 Teléfono: 2200-21-91  \n📱 WhatsApp: 098565349\n\n🏪 SUCURSALES:\n• La Comercial: Carlos Reyles 1750\n• Pocitos: Chucarro 1107\n• Tres Cruces: Mario Cassinoni 1684\n\n✨ Garantía 30 días | 🚚 Retiro a domicilio\n\n¡Gracias por contactar ReparaloYA!",
+      "metadata": {
+        "message_id": "msg_1762979176093_o2i0qa7pi",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "unknown",
+          "device_model": "unknown",
+          "service_type": "consulta general",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "low"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:27:42.890Z",
+      "role": "user",
+      "content": "What’s the price of screen replacement of iPhone 15",
+      "metadata": {
+        "message_id": "msg_1762979262890_gqr8r561b",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:27:47.097Z",
+      "role": "assistant",
+      "content": "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles. Si deseas más información, puedes contactarnos por WhatsApp al 098565349 o llamar al 2200-21-91. ¡Gracias!",
+      "metadata": {
+        "message_id": "msg_1762979267097_ospexspkd",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 15",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:28:27.300Z",
+      "role": "user",
+      "content": "And the screen of iPhone 14?",
+      "metadata": {
+        "message_id": "msg_1762979307300_8sacbjsph",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:28:31.439Z",
+      "role": "assistant",
+      "content": "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles. Si deseas más información, por favor contáctanos por WhatsApp al 098565349 o llámanos al 2200-21-91. ¡Gracias!",
+      "metadata": {
+        "message_id": "msg_1762979311439_op4ha8xji",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 14",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:30:45.552Z",
+      "role": "user",
+      "content": "Pantalla of iPhone 14?",
+      "metadata": {
+        "message_id": "msg_1762979445552_g8z5uqp4o",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": ""
+      }
+    },
+    {
+      "timestamp": "2025-11-12T20:30:48.047Z",
+      "role": "assistant",
+      "content": "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles. Si deseas más información, por favor contáctanos a través de WhatsApp al 098565349 o llámanos al 2200-21-91. ¡Estamos aquí para ayudarte!",
+      "metadata": {
+        "message_id": "msg_1762979448047_8jl5l2kmw",
+        "message_type": "text",
+        "media_url": "",
+        "channel": "SMS",
+        "contact_name": "",
+        "classification": {
+          "device_brand": "Apple",
+          "device_model": "iPhone 14",
+          "service_type": "pantalla",
+          "urgency": "medium",
+          "language": "es",
+          "confidence": "medium"
+        }
       }
     }
   ]
