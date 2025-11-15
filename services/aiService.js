@@ -10,11 +10,11 @@ class ImprovedAIService {
 
     this.openai = new OpenAI({
       apiKey,
-      timeout: 45000, // Increased timeout for better model
+      timeout: 45000,
       maxRetries: 3,
     });
     
-    console.log("✅ Servicio IA Mejorado inicializado - GPT-4o con contexto extendido");
+    console.log("✅ Servicio IA Mejorado inicializado - GPT-4o con manejo de saludos");
   }
 
   async processMessage(messageContent, messageType, mediaUrl, pricingData, contactInfo) {
@@ -76,28 +76,49 @@ class ImprovedAIService {
 
   async generateResponse(processedContent, contactInfo) {
     try {
-      // Search for products with better filtering
-      const SimplifiedPricingService = require('./pricingService');
-      const products = await SimplifiedPricingService.searchProducts(processedContent, 30);
+      // Check if this is a simple greeting without product inquiry
+      const isSimpleGreeting = this._isSimpleGreeting(processedContent);
       
-      console.log(`📊 Encontrado ${products.length} productos para: "${processedContent}"`);
+      // Search for products only if NOT a simple greeting
+      let products = [];
+      let filteredProducts = [];
+      let productsText = '';
+      
+      if (!isSimpleGreeting) {
+        const SimplifiedPricingService = require('./pricingService');
+        products = await SimplifiedPricingService.searchProducts(processedContent, 30);
+        
+        console.log(`📊 Encontrado ${products.length} productos para: "${processedContent}"`);
 
-      // Filter products to show only relevant part types
-      const filteredProducts = this._filterRelevantProducts(products, processedContent);
-      console.log(`🎯 Productos filtrados: ${filteredProducts.length} (solo relevantes)`);
+        // Filter products to show only relevant part types
+        filteredProducts = this._filterRelevantProducts(products, processedContent);
+        console.log(`🎯 Productos filtrados: ${filteredProducts.length} (solo relevantes)`);
 
-      // Create products text for AI
-      const productsText = this._createProductsText(filteredProducts);
+        // Create products text for AI
+        productsText = this._createProductsText(filteredProducts);
+      } else {
+        console.log('🤝 Saludo simple detectado, no buscando productos');
+        productsText = 'No aplicable - saludo simple.';
+      }
       
       // Get extended conversation context
       let conversationContext = '';
+      let conversationSummary = '';
       try {
         const ConversationMemoryService = require('./conversationMemoryService');
-        const context = ConversationMemoryService.getConversationContext(contactInfo.contact_id, 10); // Increased from 4 to 10
+        const context = ConversationMemoryService.getConversationContext(contactInfo.contact_id, 10);
         console.log('contexto extendido:', context);
+        
         if (context.length > 0) {
           conversationContext = 'Mensajes anteriores (contexto de conversación):\n' + 
             context.map(msg => `${msg.role === 'user' ? 'Cliente' : 'Asistente'}: ${msg.content.substring(0, 200)}`).join('\n') + '\n\n';
+          
+          // Create conversation summary for greeting responses
+          const summary = ConversationMemoryService.getConversationSummary(contactInfo.contact_id);
+          if (summary && summary.message_count > 2) {
+            conversationSummary = `Cliente recurrente. Mensajes previos: ${summary.message_count}. Última actividad: ${this._formatLastActivity(summary.last_message)}.`;
+          }
+          
           console.log('contexto de conversación:', conversationContext);
         }
       } catch (err) {
@@ -108,13 +129,13 @@ class ImprovedAIService {
 
 REGLAS CRÍTICAS:
 1. 🇪🇸 RESPONDE SIEMPRE EN ESPAÑOL - NUNCA EN INGLÉS
-2. 🚀 MUESTRA TODAS las opciones disponibles INMEDIATAMENTE
-3. ❌ NUNCA preguntes "¿qué calidad prefieres?" ANTES de mostrar precios
-4. 💰 USA SOLO los precios de la base de datos - NUNCA inventes
-5. 📱 MUESTRA SOLO las piezas RELEVANTES a lo que pide el cliente
-6. 🔄 MANTÉN el flujo de conversación - referencia mensajes anteriores cuando sea apropiado
-7. 🚫 NUNCA menciones "porcentaje de relevancia", "puntajes de similitud", o detalles técnicos de búsqueda a los clientes
-8. 🎯 Si el cliente pide "pantalla iPhone 15" - muestra SOLO opciones de pantalla, NO altavoces, cámaras, u otras piezas
+2. 🤝 MANEJO DE SALUDOS: Si el cliente envía solo un saludo básico (Hola, Hi, Buenos días, etc.) SIN mencionar productos/servicios, responde con saludo amigable y pregunta en qué puedes ayudar HOY
+3. 🚀 MUESTRA TODAS las opciones disponibles INMEDIATAMENTE solo cuando hay consulta específica de producto
+4. ❌ NUNCA asumas que quieren continuar conversaciones anteriores a menos que lo mencionen específicamente
+5. 💰 USA SOLO los precios de la base de datos - NUNCA inventes
+6. 📱 MUESTRA SOLO las piezas RELEVANTES a lo que pide el cliente
+7. 🔄 USA el contexto de conversación solo cuando el cliente hace referencia a temas anteriores
+8. 🚫 NUNCA menciones "porcentaje de relevancia", "puntajes de similitud", o detalles técnicos de búsqueda a los clientes
 
 PRODUCTOS ENCONTRADOS (Búsqueda semántica filtrada):
 ${productsText}
@@ -129,94 +150,93 @@ INFORMACIÓN DEL NEGOCIO:
 
 ✨ Garantía: 30 días | 🚚 Retiro a domicilio disponible
 
-USO DEL CONTEXTO DE CONVERSACIÓN:
-- Si el cliente preguntó anteriormente sobre un dispositivo, reconócelo naturalmente
-- Si están haciendo seguimiento a una consulta anterior, refiérelo
-- Construye sobre la conversación anterior naturalmente sin repetir información
-- Si cambian de tema, enfócate en la nueva solicitud
-- Usa información de mensajes anteriores para personalizar la respuesta
+MANEJO DE SALUDOS Y CONTEXTO:
+- Si es saludo simple: Saluda amigablemente y pregunta en qué puedes ayudar HOY
+- Si mencionan algo específico: Busca productos y ofrece opciones
+- Si referencian conversación anterior: "sobre lo que hablamos", "la pantalla que mencionaste", etc. - entonces usa contexto
+- Si es cliente recurrente pero saludo simple: Reconócelo brevemente pero pregunta qué necesita HOY
 
 REGLAS DE FILTRADO DE PRODUCTOS:
-- Cliente pide "pantalla" → Muestra SOLO productos relacionados con pantallas
-- Cliente pide "batería" → Muestra SOLO productos relacionados con baterías
+- Cliente pide "pantalla" → Muestra SOLO productos relacionados con pantallas (Original Y Compatible)
+- Cliente pide "batería" → Muestra SOLO productos relacionados con baterías 
 - Cliente pide "cámara" → Muestra SOLO productos relacionados con cámaras
 - NUNCA mezcles diferentes tipos de piezas en una respuesta
-- Si no existe modelo exacto, muestra modelos similares del MISMO TIPO DE PIEZA solamente
-
-ESTILO DE RESPUESTA:
-- Escribe como un representante de servicio al cliente humano
-- NUNCA menciones detalles técnicos como "80% de relevancia" o "búsqueda semántica"
-- Mantén respuestas conversacionales y útiles
-- No abrumes con demasiadas opciones (máximo 5-6 artículos relevantes)
-- Sé cálido y profesional
+- SIEMPRE muestra múltiples calidades cuando existan (Original, Compatible, etc.)
 
 EJEMPLOS CORRECTOS:
 
-Ejemplo 1 - Coincidencia exacta:
+Ejemplo 1 - Saludo simple (NUEVO CLIENTE):
+Cliente: "Hola"
+Respuesta: "¡Hola! Bienvenido a ReparaloYA. ¿En qué podemos ayudarte hoy?"
+
+Ejemplo 2 - Saludo simple (CLIENTE RECURRENTE):
+Cliente: "Hi" 
+Contexto: Ha preguntado antes sobre iPhone 14
+Respuesta: "¡Hola [nombre]! ¿Cómo estás? ¿En qué puedo ayudarte hoy?"
+
+Ejemplo 3 - Consulta específica:
 Cliente: "Precio pantalla iPhone 12"
 Respuesta: "Para cambio de pantalla iPhone 12:
-• Calidad Original: 4,800 UYU
-• Calidad Compatible: 2,900 UYU
-Ambas vienen con garantía de 30 días. ¿Cuál calidad preferirías?"
+• Pantalla Original: 4,800 UYU
+• Pantalla Compatible: 2,900 UYU
+Ambas con garantía de 30 días. ¿Cuál prefieres?"
 
-Ejemplo 2 - Sin modelo exacto, mostrar modelos similares del MISMO TIPO:
-Cliente: "Pantalla iPhone 15"
-Respuesta: "Aún no tenemos pantallas iPhone 15 en stock, pero tenemos modelos iPhone similares:
-• Pantalla iPhone 14 Original: 5,200 UYU
-• Pantalla iPhone 13 Pro Original: 4,800 UYU
-• Pantalla iPhone 14 Pro Original: 5,600 UYU
-Nuestro equipo puede verificar si conseguimos el iPhone 15 específicamente. ¿Cuál te interesa?"
+Ejemplo 4 - Referencia a conversación anterior:
+Cliente: "Sobre la pantalla del iPhone que consultamos"
+Respuesta: [Usar contexto y responder sobre la pantalla específica mencionada antes]
 
-Ejemplo 3 - Siguiendo contexto de conversación:
-Anterior: Cliente preguntó sobre batería iPhone 12
-Actual: "¿Y la pantalla?"
-Respuesta: "Para la pantalla del iPhone 12 (ya que estábamos hablando de tu iPhone 12):
-• Calidad Original: 4,800 UYU  
-• Calidad Compatible: 2,900 UYU
-¿Te gustaría reparar tanto la batería como la pantalla? Ofrecemos descuentos por reparaciones combinadas."
+Ejemplo 5 - Saludo + consulta:
+Cliente: "Hola, necesito cambiar pantalla iPhone 13"
+Respuesta: "¡Hola! Para cambio de pantalla iPhone 13:
+• Pantalla Original: 4,500 UYU  
+• Pantalla Compatible: 2,700 UYU
+¿Cuál te conviene más?"
 
-Ejemplo 4 - Cliente regresando después de conversación anterior:
-Contexto: Cliente preguntó anteriormente sobre iPhone 13
-Nuevo mensaje: "Hola, he estado pensando"
-Respuesta: "¡Hola! Me alegra verte de vuelta. ¿Has tomado una decisión sobre tu iPhone 13? Habías preguntado sobre [referenciar la consulta anterior]. ¿Cómo puedo ayudarte hoy?"
+MALOS EJEMPLOS (NO HAGAS ESTO):
 
-MAL EJEMPLO (NO HAGAS ESTO):
-Cliente: "Pantalla iPhone 15"
-MALA Respuesta: "Aquí tienes productos con 75% de relevancia:
-• Pantalla iPhone 14: 5,200 UYU (85% de similitud)
-• Altavoz iPhone 15: 800 UYU (60% de relevancia)  
-• Cámara iPhone 13: 1,200 UYU (45% de coincidencia)"
+❌ Cliente: "Hi"
+MALA Respuesta: "¡Hola! Veo que estabas interesado en la pantalla del iPhone 14. Tenemos disponible: Pantalla Original 5,200 UYU..."
 
-RESPONDE COMO UN REPRESENTANTE DE SERVICIO AL CLIENTE HUMANO ÚTIL EN ESPAÑOL.`;
+❌ Cliente: "Buenos días"  
+MALA Respuesta: "Buenos días! Para continuar con tu consulta del iPhone 12..."
+
+RESPONDE COMO UN REPRESENTANTE DE SERVICIO AL CLIENTE HUMANO NATURAL EN ESPAÑOL.`;
 
       const userPrompt = `Cliente: ${contactInfo.full_name || "Cliente"}
 Mensaje actual: "${processedContent}"
 
 ${conversationContext}
 
+${conversationSummary ? `Resumen del cliente: ${conversationSummary}` : ''}
+
 INSTRUCCIONES IMPORTANTES:
-1. Si hay productos disponibles: MUESTRA TODAS las opciones con precios INMEDIATAMENTE
-2. Si NO hay productos exactos: "Tu solicitud ha sido registrada. Te contactaremos pronto con las opciones disponibles."
-3. NUNCA inventes precios
-4. Usa el contexto de conversación para personalizar tu respuesta
-5. Muestra SOLO las piezas relevantes a la solicitud del cliente
-6. Responde SOLO en español
-7. Si es un seguimiento de conversación, referencia naturalmente los mensajes anteriores`;
+1. DETECTA el tipo de mensaje:
+   - ¿Es solo un saludo básico? → Saluda y pregunta en qué puedes ayudar HOY
+   - ¿Menciona productos específicos? → Muestra opciones con precios
+   - ¿Hace referencia a conversación anterior? → Usa contexto apropiadamente
+
+2. NO asumas que quieren continuar temas anteriores solo por saludar
+
+3. Si hay productos disponibles: MUESTRA TODAS las opciones (Original Y Compatible) con precios INMEDIATAMENTE
+
+4. Responde SOLO en español
+
+5. Sé natural y amigable, no robótico`;
 
       const result = await this.openai.chat.completions.create({
-        model: "gpt-4o", // Upgraded from gpt-3.5-turbo to gpt-4o
+        model: "gpt-4o",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        temperature: 0.1,
-        max_tokens: 1000, // Increased from 800
+        temperature: 0.2, // Slightly higher for more natural responses
+        max_tokens: 1000,
       });
 
       const response = result.choices[0].message.content.trim();
       
       // Extract classification with better logic
-      const classification = this._extractClassification(processedContent, response);
+      const classification = this._extractClassification(processedContent, response, isSimpleGreeting);
 
       return {
         customer_response: response,
@@ -224,7 +244,8 @@ INSTRUCCIONES IMPORTANTES:
         processed_content: processedContent,
         pricing_items_found: filteredProducts.length,
         total_products_searched: products.length,
-        parsing_method: 'improved-semantic-filtering',
+        is_simple_greeting: isSimpleGreeting,
+        parsing_method: isSimpleGreeting ? 'greeting-handler' : 'improved-semantic-filtering',
         model_used: 'gpt-4o',
         context_messages: conversationContext ? conversationContext.split('\n').length - 2 : 0
       };
@@ -232,6 +253,56 @@ INSTRUCCIONES IMPORTANTES:
     } catch (error) {
       console.error("❌ Error generación respuesta:", error.message);
       return this.createFallbackResponse(processedContent, contactInfo);
+    }
+  }
+
+  _isSimpleGreeting(message) {
+    const greetings = [
+      'hola', 'hi', 'hello', 'buenos días', 'buenas tardes', 'buenas noches',
+      'buen día', 'saludos', 'que tal', 'qué tal', 'como estas', 'cómo estás',
+      'hey', 'holaa', 'holaaa'
+    ];
+    
+    const messageLower = message.toLowerCase().trim();
+    
+    // Check if it's ONLY a greeting (no product mentions)
+    const isJustGreeting = greetings.some(greeting => {
+      // Exact match or with punctuation
+      return messageLower === greeting || 
+             messageLower === greeting + '!' || 
+             messageLower === greeting + '.' ||
+             messageLower === greeting + '?';
+    });
+    
+    // Also check for very short greetings
+    const isShortGreeting = messageLower.length <= 10 && greetings.some(greeting => 
+      messageLower.includes(greeting)
+    );
+    
+    // Make sure it doesn't contain product terms
+    const productTerms = [
+      'pantalla', 'batería', 'cámara', 'altavoz', 'micrófono', 'carga',
+      'iphone', 'samsung', 'reparar', 'arreglar', 'precio', 'costo',
+      'screen', 'battery', 'camera', 'speaker', 'repair', 'fix'
+    ];
+    
+    const hasProductTerms = productTerms.some(term => messageLower.includes(term));
+    
+    return (isJustGreeting || isShortGreeting) && !hasProductTerms;
+  }
+
+  _formatLastActivity(timestamp) {
+    try {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffHours = Math.round((now - date) / (1000 * 60 * 60));
+      
+      if (diffHours < 1) return 'hace menos de 1 hora';
+      if (diffHours < 24) return `hace ${diffHours} horas`;
+      const diffDays = Math.round(diffHours / 24);
+      return `hace ${diffDays} días`;
+    } catch {
+      return 'recientemente';
     }
   }
 
@@ -289,24 +360,73 @@ INSTRUCCIONES IMPORTANTES:
 
     let text = `${products.length} productos relevantes encontrados:\n`;
     
-    // Check if any products are approximate matches
-    const hasApproximateMatches = products.some(p => p._isApproximate);
+    // Group products by type for better organization
+    const productGroups = {};
     
     for (const product of products) {
       const productName = product.Prod || product.product || Object.values(product)[0] || 'Producto desconocido';
       const price = this._getPrice(product);
       const priceText = price > 0 ? `${price} UYU` : 'Consultar precio';
       
-      text += `• ${productName}: ${priceText}\n`;
+      // Try to determine product type (Original, Compatible, etc.)
+      const productLower = productName.toLowerCase();
+      let productType = 'standard';
+      
+      if (productLower.includes('original') || productLower.includes('oem')) {
+        productType = 'original';
+      } else if (productLower.includes('compatible') || productLower.includes('generico')) {
+        productType = 'compatible';
+      } else if (productLower.includes('premium') || productLower.includes('aaa')) {
+        productType = 'premium';
+      }
+      
+      const baseModel = this._extractBaseModel(productName);
+      
+      if (!productGroups[baseModel]) {
+        productGroups[baseModel] = {};
+      }
+      
+      productGroups[baseModel][productType] = { productName, priceText };
     }
     
-    // Add note about approximate matches if any
-    if (hasApproximateMatches) {
-      const exactModel = products[0]._exactModelRequested;
-      text += `\nNOTA: No se encontró el modelo exacto "${exactModel}". Los precios mostrados son de modelos similares. Nuestro equipo te contactará para confirmar el precio exacto del modelo solicitado.`;
+    // Format grouped products
+    text = '';
+    for (const [model, types] of Object.entries(productGroups)) {
+      if (Object.keys(types).length > 1) {
+        text += `${model}:\n`;
+        for (const [type, info] of Object.entries(types)) {
+          const typeLabel = type === 'original' ? 'Original' : 
+                           type === 'compatible' ? 'Compatible' : 
+                           type === 'premium' ? 'Premium' : '';
+          text += `• ${typeLabel ? typeLabel + ': ' : ''}${info.priceText}\n`;
+        }
+      } else {
+        const info = Object.values(types)[0];
+        text += `• ${info.productName}: ${info.priceText}\n`;
+      }
     }
     
-    return text;
+    return text.trim();
+  }
+
+  _extractBaseModel(productName) {
+    // Extract base model (e.g., "iPhone 14" from "iPhone 14 Pantalla Original")
+    const modelPatterns = [
+      /iphone\s*(\d+)(\s*pro)?(\s*max)?/i,
+      /galaxy\s*([a-z]\d+)/i,
+      /samsung\s*([a-z]\d+)/i,
+      /xiaomi\s*([\w\s]+)/i,
+      /huawei\s*([\w\s]+)/i
+    ];
+    
+    for (const pattern of modelPatterns) {
+      const match = productName.match(pattern);
+      if (match) {
+        return match[0];
+      }
+    }
+    
+    return productName.split(' ').slice(0, 3).join(' '); // Fallback: first 3 words
   }
 
   _getPrice(item) {
@@ -323,7 +443,7 @@ INSTRUCCIONES IMPORTANTES:
     return 0;
   }
 
-  _extractClassification(originalContent, response) {
+  _extractClassification(originalContent, response, isSimpleGreeting) {
     const text = (originalContent + ' ' + response).toLowerCase();
     
     let device_brand = "unknown";
@@ -336,33 +456,38 @@ INSTRUCCIONES IMPORTANTES:
     else if (text.includes('sony')) device_brand = "Sony";
     else if (text.includes('oneplus')) device_brand = "OnePlus";
 
-    let service_type = "consulta general";
-    if (text.includes('pantalla') || text.includes('screen') || text.includes('display')) service_type = "pantalla";
-    else if (text.includes('batería') || text.includes('battery') || text.includes('bateria')) service_type = "batería";
-    else if (text.includes('cámara') || text.includes('camera') || text.includes('camara')) service_type = "cámara";
-    else if (text.includes('carga') || text.includes('charging') || text.includes('carga')) service_type = "carga";
-    else if (text.includes('altavoz') || text.includes('speaker') || text.includes('parlante')) service_type = "altavoz";
-    else if (text.includes('micro') || text.includes('microphone') || text.includes('micrófono')) service_type = "micrófono";
+    let service_type = isSimpleGreeting ? "saludo" : "consulta general";
+    if (!isSimpleGreeting) {
+      if (text.includes('pantalla') || text.includes('screen') || text.includes('display')) service_type = "pantalla";
+      else if (text.includes('batería') || text.includes('battery') || text.includes('bateria')) service_type = "batería";
+      else if (text.includes('cámara') || text.includes('camera') || text.includes('camara')) service_type = "cámara";
+      else if (text.includes('carga') || text.includes('charging') || text.includes('carga')) service_type = "carga";
+      else if (text.includes('altavoz') || text.includes('speaker') || text.includes('parlante')) service_type = "altavoz";
+      else if (text.includes('micro') || text.includes('microphone') || text.includes('micrófono')) service_type = "micrófono";
+    }
 
     // Better device model extraction
     let device_model = "unknown";
-    const iphoneMatch = text.match(/iphone\s*(\d+)(\s*pro)?(\s*max)?/i);
-    if (iphoneMatch) {
-      device_model = `iPhone ${iphoneMatch[1]}${iphoneMatch[2] || ''}${iphoneMatch[3] || ''}`.trim();
-    }
-    
-    const samsungMatch = text.match(/galaxy\s*([a-z]\d+)/i) || text.match(/samsung\s*([a-z]\d+)/i);
-    if (samsungMatch) {
-      device_model = `Galaxy ${samsungMatch[1].toUpperCase()}`;
+    if (!isSimpleGreeting) {
+      const iphoneMatch = text.match(/iphone\s*(\d+)(\s*pro)?(\s*max)?/i);
+      if (iphoneMatch) {
+        device_model = `iPhone ${iphoneMatch[1]}${iphoneMatch[2] || ''}${iphoneMatch[3] || ''}`.trim();
+      }
+      
+      const samsungMatch = text.match(/galaxy\s*([a-z]\d+)/i) || text.match(/samsung\s*([a-z]\d+)/i);
+      if (samsungMatch) {
+        device_model = `Galaxy ${samsungMatch[1].toUpperCase()}`;
+      }
     }
 
     return {
       device_brand,
       device_model,
       service_type,
-      urgency: "medium",
+      urgency: isSimpleGreeting ? "none" : "medium",
       language: "es",
-      confidence: "high",
+      confidence: isSimpleGreeting ? "high" : "high",
+      is_greeting: isSimpleGreeting,
       timestamp: new Date().toISOString()
     };
   }
@@ -373,7 +498,7 @@ INSTRUCCIONES IMPORTANTES:
 
       const audioResponse = await axios.get(mediaUrl, {
         responseType: "arraybuffer",
-        timeout: 45000, // Increased timeout
+        timeout: 45000,
         headers: { 'User-Agent': 'ReparaloyaBot/2.0' }
       });
 
@@ -383,7 +508,7 @@ INSTRUCCIONES IMPORTANTES:
       const transcription = await this.openai.audio.transcriptions.create({
         file: file,
         model: "whisper-1",
-        language: "es", // Spanish
+        language: "es",
         response_format: "text"
       });
 
@@ -400,7 +525,7 @@ INSTRUCCIONES IMPORTANTES:
       if (!imageUrl) throw new Error("URL imagen faltante");
 
       const result = await this.openai.chat.completions.create({
-        model: "gpt-4o", // Using better model for image analysis
+        model: "gpt-4o",
         messages: [
           {
             role: "user",
@@ -416,7 +541,7 @@ INSTRUCCIONES IMPORTANTES:
             ]
           }
         ],
-        max_tokens: 400, // Increased tokens
+        max_tokens: 400,
         temperature: 0.3
       });
 
@@ -431,6 +556,28 @@ INSTRUCCIONES IMPORTANTES:
   }
 
   createFallbackResponse(processedContent, contactInfo) {
+    const isGreeting = this._isSimpleGreeting(processedContent);
+    
+    if (isGreeting) {
+      return {
+        customer_response: `¡Hola ${contactInfo.full_name || ''}! Bienvenido a ReparaloYA. ¿En qué podemos ayudarte hoy?`,
+        classification: {
+          device_brand: "unknown",
+          device_model: "unknown",
+          service_type: "saludo",
+          urgency: "none",
+          language: "es",
+          confidence: "high",
+          is_greeting: true,
+          timestamp: new Date().toISOString()
+        },
+        processed_content: processedContent,
+        fallback: true,
+        parsing_method: 'greeting-fallback',
+        model_used: 'fallback'
+      };
+    }
+
     const response = `¡Hola ${contactInfo.full_name || ''}! 
 
 Tu solicitud ha sido registrada. Nuestro equipo te contactará pronto con las opciones disponibles para tu consulta.
@@ -457,12 +604,13 @@ Tu solicitud ha sido registrada. Nuestro equipo te contactará pronto con las op
         urgency: "medium",
         language: "es",
         confidence: "low",
+        is_greeting: false,
         timestamp: new Date().toISOString()
       },
       processed_content: processedContent,
       fallback: true,
       parsing_method: 'fallback',
-      model_used: 'gpt-4o'
+      model_used: 'fallback'
     };
   }
 }
